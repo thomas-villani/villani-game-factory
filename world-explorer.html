@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>World Explorer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#07071f;color:#fff;font-family:'Comic Sans MS','Chalkboard SE',cursive;height:100vh;overflow:hidden;user-select:none}
+canvas#stars{position:fixed;inset:0;pointer-events:none;z-index:0}
+.screen{display:none;position:fixed;inset:0;z-index:1}
+.screen.active{display:flex;flex-direction:column;align-items:center;justify-content:center}
+.card{background:rgba(255,255,255,.08);border-radius:22px;padding:28px 32px;width:min(660px,94vw);border:2px solid rgba(255,255,255,.15);backdrop-filter:blur(8px)}
+h1{text-align:center;font-size:clamp(1.3em,4vw,2em);margin-bottom:14px}
+.btn{padding:8px 18px;border-radius:12px;border:none;cursor:pointer;font-family:inherit;font-size:.93em;font-weight:700;transition:transform .1s}
+.btn:active{transform:scale(.95)}
+.btn-ghost{background:rgba(255,255,255,.15);color:#fff}
+.btn-go{background:#4ade80;color:#0a2a0a;font-size:1.15em;padding:13px 40px;border-radius:18px}
+.btn-go:hover{filter:brightness(1.1)}
+
+/* Continent picker grid */
+.continent-grid{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin:18px 0 10px}
+.continent-btn{background:rgba(255,255,255,.07);border:2px solid rgba(255,255,255,.18);border-radius:18px;padding:18px 14px;width:180px;cursor:pointer;text-align:center;transition:transform .15s,border-color .2s,background .2s;font-family:inherit;color:#fff}
+.continent-btn:hover{transform:scale(1.06);border-color:rgba(255,215,0,.6);background:rgba(255,255,255,.12)}
+.continent-btn .emoji{font-size:2em;display:block;margin-bottom:6px}
+.continent-btn .cname{font-size:1.05em;font-weight:700}
+.continent-btn .ccount{font-size:.75em;opacity:.55;margin-top:4px}
+.continent-btn.world-btn{width:100%;border-color:rgba(255,215,0,.35);background:rgba(255,215,0,.08)}
+.continent-btn.world-btn:hover{border-color:rgba(255,215,0,.7);background:rgba(255,215,0,.15)}
+
+/* HUD */
+#hud{position:fixed;top:0;left:0;right:0;height:52px;display:none;align-items:center;padding:0 12px;background:rgba(0,0,0,.7);z-index:10;gap:10px}
+#hud.active{display:flex}
+#hud-continent{font-size:1.1em;font-weight:700;color:#ffd700}
+#hud-explored{font-size:.85em;opacity:.65;flex:1}
+#hud .btn{font-size:.82em;padding:6px 14px}
+
+/* Map */
+#map-wrap{position:fixed;top:52px;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;z-index:5;overflow:hidden}
+#map-wrap svg{width:100%;height:100%}
+.country-path{stroke:rgba(100,140,200,.4);stroke-width:.5px;cursor:pointer;transition:fill .15s,stroke .15s,stroke-width .15s}
+.country-path:hover{filter:brightness(1.6);stroke:rgba(200,220,255,.7);stroke-width:1px}
+.country-path.explored{filter:brightness(1.25)}
+.country-path.selected{fill:#ffd700!important;stroke:#fff!important;stroke-width:2px!important;filter:drop-shadow(0 0 8px rgba(255,215,0,.6))}
+
+/* Tooltip */
+#tooltip{position:fixed;pointer-events:none;background:rgba(10,10,40,.92);color:#fff;padding:5px 12px;border-radius:10px;font-size:.8em;font-weight:700;z-index:50;display:none;white-space:nowrap;border:1px solid rgba(255,255,255,.2);box-shadow:0 2px 12px rgba(0,0,0,.5)}
+
+/* Info panel */
+#info-panel{position:fixed;top:52px;right:0;bottom:0;width:min(380px,88vw);background:rgba(8,8,35,.96);border-left:2px solid rgba(255,255,255,.15);backdrop-filter:blur(12px);z-index:8;transform:translateX(100%);transition:transform .3s ease;overflow-y:auto;padding:0}
+#info-panel.open{transform:translateX(0)}
+#info-close{position:absolute;top:10px;right:14px;background:rgba(255,255,255,.12);border:none;color:#fff;font-size:1.4em;cursor:pointer;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;transition:background .15s}
+#info-close:hover{background:rgba(255,255,255,.25)}
+#info-content{padding:20px 22px 30px}
+.info-flag{width:80px;height:auto;border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.2)}
+.info-header{display:flex;align-items:center;gap:16px;margin-bottom:18px}
+.info-header h2{font-size:1.5em;line-height:1.2}
+.info-row{padding:8px 0;border-bottom:1px solid rgba(255,255,255,.08);display:flex;gap:8px}
+.info-label{font-size:.78em;opacity:.5;text-transform:uppercase;letter-spacing:.5px;min-width:80px;flex-shrink:0}
+.info-value{font-size:.95em}
+.facts-title{font-size:.95em;font-weight:700;color:#ffd700;margin:18px 0 10px;display:flex;align-items:center;gap:6px}
+.fact-item{background:rgba(255,255,255,.06);border-radius:12px;padding:10px 14px;margin:8px 0;font-size:.88em;line-height:1.5;border-left:3px solid #4ade80}
+.info-nav{display:flex;gap:10px;margin-top:18px;justify-content:center}
+.info-nav .btn{font-size:.82em;padding:7px 16px}
+
+/* Zoom controls */
+#zoom-controls{position:fixed;bottom:16px;left:16px;z-index:9;display:none;flex-direction:column;gap:6px}
+#zoom-controls.active{display:flex}
+#zoom-controls .btn{width:38px;height:38px;padding:0;display:flex;align-items:center;justify-content:center;font-size:1.3em;border-radius:10px;background:rgba(255,255,255,.12);color:#fff}
+#zoom-controls .btn:hover{background:rgba(255,255,255,.25)}
+
+/* Particles & effects */
+#particles{position:fixed;inset:0;pointer-events:none;z-index:60}
+@keyframes cpop{0%{opacity:1;transform:translate(0,0) scale(1)}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(0)}}
+
+/* Mascot */
+#mascot{position:fixed;bottom:10px;right:8px;width:64px;z-index:20;display:none}
+.mfloat #msvg{animation:mfloat 3s ease-in-out infinite}
+@keyframes mfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.mhappy #msvg{animation:mhappy .55s ease forwards}
+@keyframes mhappy{0%{transform:translateY(0) rotate(0)}35%{transform:translateY(-28px) rotate(14deg)}65%{transform:translateY(-6px) rotate(-7deg)}100%{transform:translateY(0) rotate(0)}}
+
+/* Responsive */
+@media(max-width:640px){
+  .continent-btn{width:140px;padding:14px 10px}
+  .continent-btn .emoji{font-size:1.5em}
+  #info-panel{width:100vw}
+  #mascot{display:none!important}
+}
+</style>
+</head>
+<body>
+<canvas id="stars"></canvas>
+<div id="particles"></div>
+<div id="tooltip"></div>
+
+<div id="mascot" class="mfloat">
+  <svg id="msvg" viewBox="0 0 80 122" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="40" cy="30" r="30" fill="rgba(78,193,224,.12)"/>
+    <circle cx="40" cy="30" r="26" fill="#d8eef5" stroke="#9bbcc8" stroke-width="2"/>
+    <ellipse cx="40" cy="32" rx="16" ry="12.5" fill="#1a9ecb" opacity=".88"/>
+    <ellipse cx="33" cy="25" rx="5" ry="3" fill="rgba(255,255,255,.38)" transform="rotate(-18,33,25)"/>
+    <circle cx="34" cy="31" r="3" fill="#fff"/><circle cx="46" cy="31" r="3" fill="#fff"/>
+    <circle cx="35" cy="32" r="1.7" fill="#1a2a3a"/><circle cx="47" cy="32" r="1.7" fill="#1a2a3a"/>
+    <path d="M 34 39 Q 40 45.5 46 39" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <line x1="40" y1="4" x2="40" y2="13" stroke="#9bbcc8" stroke-width="2.5"/>
+    <circle cx="40" cy="3" r="3.2" fill="#ffd700"/>
+    <rect x="17" y="53" width="46" height="47" rx="14" fill="#d8eef5" stroke="#9bbcc8" stroke-width="2"/>
+    <rect x="26" y="62" width="28" height="16" rx="5" fill="#1a9ecb" opacity=".58"/>
+    <circle cx="40" cy="70" r="4.5" fill="#ffd700" opacity=".85"/>
+    <rect x="19" y="64" width="8" height="5" rx="2" fill="#e8540a" opacity=".7"/>
+    <rect x="1" y="56" width="17" height="11" rx="5.5" fill="#d8eef5" stroke="#9bbcc8" stroke-width="1.8"/>
+    <rect x="62" y="56" width="17" height="11" rx="5.5" fill="#d8eef5" stroke="#9bbcc8" stroke-width="1.8"/>
+    <circle cx="5" cy="62" r="5" fill="#aac8d8"/><circle cx="75" cy="62" r="5" fill="#aac8d8"/>
+    <rect x="21" y="96" width="14" height="21" rx="7" fill="#d8eef5" stroke="#9bbcc8" stroke-width="1.8"/>
+    <rect x="45" y="96" width="14" height="21" rx="7" fill="#d8eef5" stroke="#9bbcc8" stroke-width="1.8"/>
+    <ellipse cx="28" cy="118" rx="9.5" ry="5" fill="#aac8d8"/>
+    <ellipse cx="52" cy="118" rx="9.5" ry="5" fill="#aac8d8"/>
+  </svg>
+</div>
+
+<!-- HOME: Continent Selection -->
+<div id="home" class="screen active">
+  <div class="card">
+    <h1>World Explorer</h1>
+    <p style="text-align:center;opacity:.7;margin-bottom:4px">Choose a continent to explore!</p>
+    <div class="continent-grid" id="continent-grid"></div>
+    <p style="text-align:center;font-size:.72em;opacity:.35;margin-top:8px">Requires internet to load map data</p>
+  </div>
+</div>
+
+<!-- EXPLORE: Map + Info Panel -->
+<div id="explore" class="screen">
+  <div id="hud">
+    <button class="btn btn-ghost" onclick="goHome()" style="font-size:.85em">Back</button>
+    <span id="hud-continent"></span>
+    <span id="hud-explored"></span>
+    <button id="mute-btn" onclick="toggleMute()" style="background:none;border:none;color:#fff;font-size:1.3em;cursor:pointer;padding:4px">&#x1f50a;</button>
+  </div>
+  <div id="map-wrap"></div>
+  <div id="info-panel">
+    <button id="info-close" onclick="closeInfo()">&#x2715;</button>
+    <div id="info-content"></div>
+  </div>
+  <div id="zoom-controls">
+    <button class="btn" onclick="zoomIn()" title="Zoom in">+</button>
+    <button class="btn" onclick="zoomOut()" title="Zoom out">&minus;</button>
+    <button class="btn" onclick="zoomReset()" title="Reset zoom" style="font-size:.8em">&#x21ba;</button>
+  </div>
+</div>
+
+<script>
+// ── Starfield ───────────────────────────────────────
+(()=>{
+  const c=document.getElementById('stars');
+  c.width=innerWidth;c.height=innerHeight;
+  const x=c.getContext('2d');
+  for(let i=0;i<220;i++){x.fillStyle=`rgba(255,255,255,${.15+Math.random()*.85})`;x.beginPath();x.arc(Math.random()*c.width,Math.random()*c.height,Math.random()*1.7,0,Math.PI*2);x.fill();}
+})();
+
+// ── Audio ───────────────────────────────────────────
+let AC,muted=false;
+function initAC(){if(!AC)AC=new(window.AudioContext||window.webkitAudioContext)();}
+function toggleMute(){muted=!muted;document.getElementById('mute-btn').textContent=muted?'\u{1f507}':'\u{1f50a}';}
+function tone(f,dur,type='sine',vol=.22,when=0){if(muted||!AC)return;const t=AC.currentTime+when,o=AC.createOscillator(),g=AC.createGain();o.connect(g);g.connect(AC.destination);o.type=type;o.frequency.value=f;g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(.001,t+dur);o.start(t);o.stop(t+dur+.05);}
+function sndDiscover(){[523,659,784,1047].forEach((f,i)=>tone(f,.16,'sine',.18,i*.08));}
+function sndNav(){[440,554].forEach((f,i)=>tone(f,.12,'sine',.14,i*.06));}
+function sndOpen(){tone(660,.15,'sine',.12);tone(880,.15,'sine',.1,.08);}
+
+// ── Continent config ────────────────────────────────
+const CONTINENTS={
+  world:{name:'Whole World',emoji:'\u{1fa90}',center:[0,20],scale:155,proj:'natural'},
+  africa:{name:'Africa',emoji:'\u{1f30d}',center:[20,3],scale:370},
+  europe:{name:'Europe',emoji:'\u{1f30d}',center:[15,54],scale:600},
+  asia:{name:'Asia',emoji:'\u{1f30f}',center:[85,35],scale:300},
+  northAmerica:{name:'North America',emoji:'\u{1f30e}',center:[-95,38],scale:350},
+  southAmerica:{name:'South America',emoji:'\u{1f30e}',center:[-58,-18],scale:350},
+  oceania:{name:'Oceania',emoji:'\u{1f30f}',center:[148,-25],scale:420},
+};
+
+const SUBREGION_COLORS={
+  'Northern Africa':'#2e2210','Western Africa':'#0e2e58','Central Africa':'#2a0e48','Eastern Africa':'#0c3420','Southern Africa':'#341410',
+  'Central Asia':'#2e2210','Eastern Asia':'#0e2e58','Southern Asia':'#2a0e48','South-Eastern Asia':'#0c3420','Western Asia':'#341410',
+  'Northern Europe':'#0e2e58','Western Europe':'#2a0e48','Eastern Europe':'#341410','Southern Europe':'#0c3420',
+  'Northern America':'#0e2e58','Central America':'#0c3420','Caribbean':'#2a0e48',
+  'Northern South America':'#0e2e58','Andean':'#0c3420','Brazilian':'#2a0e48','Southern South America':'#341410',
+  'Australia and New Zealand':'#0e2e58','Melanesia':'#0c3420','Micronesia':'#2a0e48','Polynesia':'#341410',
+};
+
+// ── Country Data ────────────────────────────────────
+const CD={
+// ── AFRICA ──────────────────────────────────────────
+'12':{n:'Algeria',a2:'dz',c:'africa',sr:'Northern Africa',cap:'Algiers',lang:['Arabic','Berber'],pop:'45M',cur:'Algerian Dinar (DZD)',facts:['Algeria is the largest country in Africa by area.','The Sahara Desert covers more than 80% of the country.','Algiers, the capital, is known as the "White City" for its gleaming white buildings.']},
+'24':{n:'Angola',a2:'ao',c:'africa',sr:'Central Africa',cap:'Luanda',lang:['Portuguese'],pop:'36M',cur:'Angolan Kwanza (AOA)',facts:['Angola is one of Africa\'s largest oil-producing countries.','The giant sable antelope, found only in Angola, is the national symbol.','Angolan music styles like semba and kizomba are popular worldwide.']},
+'204':{n:'Benin',a2:'bj',c:'africa',sr:'Western Africa',cap:'Porto-Novo',lang:['French'],pop:'13M',cur:'West African CFA Franc (XOF)',facts:['Benin is considered the birthplace of the Vodun (Voodoo) religion.','The ancient Kingdom of Dahomey was famous for its all-female warrior regiment.','Benin has a village on stilts called Ganvie, built entirely over a lake.']},
+'72':{n:'Botswana',a2:'bw',c:'africa',sr:'Southern Africa',cap:'Gaborone',lang:['English','Setswana'],pop:'2.6M',cur:'Botswana Pula (BWP)',facts:['Botswana is home to the Okavango Delta, the world\'s largest inland river delta.','About 40% of the land is set aside for national parks and wildlife reserves.','Botswana has one of the largest elephant populations in the world.']},
+'854':{n:'Burkina Faso',a2:'bf',c:'africa',sr:'Western Africa',cap:'Ouagadougou',lang:['French'],pop:'23M',cur:'West African CFA Franc (XOF)',facts:['Burkina Faso means "Land of the Honest People."','The country hosts Africa\'s largest film festival, called FESPACO.','Many traditional mud-brick houses are beautifully painted with geometric patterns.']},
+'108':{n:'Burundi',a2:'bi',c:'africa',sr:'Eastern Africa',cap:'Gitega',lang:['Kirundi','French','English'],pop:'13M',cur:'Burundian Franc (BIF)',facts:['Burundi is one of the smallest countries in Africa.','Drumming is a sacred tradition, and the Royal Drummers of Burundi are world-famous.','Lake Tanganyika, on its border, is the second deepest lake in the world.']},
+'120':{n:'Cameroon',a2:'cm',c:'africa',sr:'Central Africa',cap:'Yaounde',lang:['French','English'],pop:'28M',cur:'Central African CFA Franc (XAF)',facts:['Cameroon is called "Africa in miniature" because it has all of Africa\'s major climates and landscapes.','Football (soccer) is the most popular sport and the national team is called the Indomitable Lions.','Mount Cameroon is the highest mountain in West Africa.']},
+'140':{n:'Central African Republic',a2:'cf',c:'africa',sr:'Central Africa',cap:'Bangui',lang:['French','Sango'],pop:'5.5M',cur:'Central African CFA Franc (XAF)',facts:['The Central African Republic is home to forest elephants and lowland gorillas.','The Dzanga-Sangha rainforest is one of the most biodiverse places on Earth.','The Boali Waterfalls near the capital are a stunning natural wonder.']},
+'148':{n:'Chad',a2:'td',c:'africa',sr:'Central Africa',cap:'N\'Djamena',lang:['French','Arabic'],pop:'18M',cur:'Central African CFA Franc (XAF)',facts:['Lake Chad, once one of Africa\'s largest lakes, has shrunk by 90% since the 1960s.','The Sahara Desert covers the northern third of Chad.','Chad is home to the Ennedi Plateau, with ancient rock art thousands of years old.']},
+'178':{n:'Republic of the Congo',a2:'cg',c:'africa',sr:'Central Africa',cap:'Brazzaville',lang:['French'],pop:'6M',cur:'Central African CFA Franc (XAF)',facts:['Brazzaville and Kinshasa, capitals of two different countries, face each other across the Congo River.','More than 60% of the country is covered by tropical rainforest.','The Congo Basin rainforest is the second largest in the world after the Amazon.']},
+'180':{n:'Democratic Republic of the Congo',a2:'cd',c:'africa',sr:'Central Africa',cap:'Kinshasa',lang:['French'],pop:'102M',cur:'Congolese Franc (CDF)',facts:['The DRC is the largest country in sub-Saharan Africa.','The Congo River is the deepest river in the world, reaching over 220 meters deep.','The country is home to the okapi, a rare animal related to the giraffe that looks like a zebra.']},
+'384':{n:"Cote d'Ivoire",a2:'ci',c:'africa',sr:'Western Africa',cap:'Yamoussoukro',lang:['French'],pop:'28M',cur:'West African CFA Franc (XOF)',facts:["Cote d'Ivoire is the world's largest producer of cocoa beans, used to make chocolate.","The Basilica of Our Lady of Peace in Yamoussoukro is one of the largest churches in the world.","Football is hugely popular, and the national team is called the Elephants."]},
+'262':{n:'Djibouti',a2:'dj',c:'africa',sr:'Eastern Africa',cap:'Djibouti',lang:['French','Arabic'],pop:'1M',cur:'Djiboutian Franc (DJF)',facts:['Djibouti is one of the hottest countries on Earth with summer temperatures often above 40 degrees Celsius.','Lake Assal is the lowest point in Africa and one of the saltiest bodies of water in the world.','Djibouti is located at the southern entrance to the Red Sea, a key shipping route.']},
+'818':{n:'Egypt',a2:'eg',c:'africa',sr:'Northern Africa',cap:'Cairo',lang:['Arabic'],pop:'104M',cur:'Egyptian Pound (EGP)',facts:['The Great Pyramid of Giza is one of the Seven Wonders of the Ancient World and is over 4,500 years old.','Ancient Egyptians invented toothpaste, paper (papyrus), and one of the first writing systems (hieroglyphics).','The Nile is the longest river in Africa and was the lifeblood of ancient Egyptian civilization.']},
+'226':{n:'Equatorial Guinea',a2:'gq',c:'africa',sr:'Central Africa',cap:'Malabo',lang:['Spanish','French','Portuguese'],pop:'1.7M',cur:'Central African CFA Franc (XAF)',facts:['Equatorial Guinea is the only country in Africa where Spanish is an official language.','Despite its name, the Equator does not actually pass through Equatorial Guinea.','The island of Bioko has some of the highest primate diversity in Africa.']},
+'232':{n:'Eritrea',a2:'er',c:'africa',sr:'Eastern Africa',cap:'Asmara',lang:['Tigrinya','Arabic','English'],pop:'3.6M',cur:'Eritrean Nakfa (ERN)',facts:['Asmara, the capital, is a UNESCO World Heritage Site known for its Art Deco buildings.','Eritrea has one of the oldest human fossil sites in Africa, dating back over a million years.','The Dahlak Archipelago in the Red Sea has beautiful coral reefs and marine life.']},
+'748':{n:'Eswatini',a2:'sz',c:'africa',sr:'Southern Africa',cap:'Mbabane',lang:['Swati','English'],pop:'1.2M',cur:'Swazi Lilangeni (SZL)',facts:['Eswatini (formerly Swaziland) is one of the smallest countries in Africa.','It is one of the last absolute monarchies in the world.','The Umhlanga Reed Dance is a famous annual cultural ceremony.']},
+'231':{n:'Ethiopia',a2:'et',c:'africa',sr:'Eastern Africa',cap:'Addis Ababa',lang:['Amharic'],pop:'126M',cur:'Ethiopian Birr (ETB)',facts:['Ethiopia is considered the birthplace of coffee, and the coffee ceremony is a beloved tradition.','It has its own calendar with 13 months, running about 7 years behind the Western calendar.','Ethiopia is one of the only African countries that was never colonized by a European power.']},
+'266':{n:'Gabon',a2:'ga',c:'africa',sr:'Central Africa',cap:'Libreville',lang:['French'],pop:'2.4M',cur:'Central African CFA Franc (XAF)',facts:['About 85% of Gabon is covered by tropical rainforest.','Gabon is home to forest elephants, gorillas, and chimpanzees.','Lope National Park is a UNESCO World Heritage Site with both rainforest and savanna.']},
+'270':{n:'Gambia',a2:'gm',c:'africa',sr:'Western Africa',cap:'Banjul',lang:['English'],pop:'2.7M',cur:'Gambian Dalasi (GMD)',facts:['Gambia is the smallest country on mainland Africa.','It is shaped like a long thin strip following the Gambia River.','Gambia is a popular destination for birdwatching with over 560 bird species.']},
+'288':{n:'Ghana',a2:'gh',c:'africa',sr:'Western Africa',cap:'Accra',lang:['English'],pop:'34M',cur:'Ghanaian Cedi (GHS)',facts:['Ghana was the first country in sub-Saharan Africa to gain independence in 1957.','It is one of the world\'s largest producers of cocoa and gold.','Ghanaians celebrate with colorful fantasy coffins shaped like cars, animals, and other objects.']},
+'324':{n:'Guinea',a2:'gn',c:'africa',sr:'Western Africa',cap:'Conakry',lang:['French'],pop:'14M',cur:'Guinean Franc (GNF)',facts:['Guinea has some of the world\'s largest reserves of bauxite, the ore used to make aluminum.','The Niger, Senegal, and Gambia rivers all have their sources in Guinea.','Traditional Guinean music, especially djembe drumming, is famous around the world.']},
+'624':{n:'Guinea-Bissau',a2:'gw',c:'africa',sr:'Western Africa',cap:'Bissau',lang:['Portuguese'],pop:'2.1M',cur:'West African CFA Franc (XOF)',facts:['Guinea-Bissau has an archipelago of 88 islands called the Bijagos, some of which are uninhabited.','The country is one of the largest cashew nut producers in the world.','Carnival in Bissau is a major celebration with colorful masks and dancing.']},
+'404':{n:'Kenya',a2:'ke',c:'africa',sr:'Eastern Africa',cap:'Nairobi',lang:['English','Swahili'],pop:'56M',cur:'Kenyan Shilling (KES)',facts:['Kenya is famous for the Great Wildebeest Migration in the Masai Mara.','Kenyan runners are among the fastest in the world, especially in long-distance races.','Mount Kenya is the second highest mountain in Africa.']},
+'426':{n:'Lesotho',a2:'ls',c:'africa',sr:'Southern Africa',cap:'Maseru',lang:['Sesotho','English'],pop:'2.3M',cur:'Lesotho Loti (LSL)',facts:['Lesotho is entirely surrounded by South Africa, making it one of three countries completely enclosed by another.','It is the only country in the world where all of its land is above 1,000 meters elevation.','Lesotho is sometimes called the "Kingdom in the Sky."']},
+'430':{n:'Liberia',a2:'lr',c:'africa',sr:'Western Africa',cap:'Monrovia',lang:['English'],pop:'5.3M',cur:'Liberian Dollar (LRD)',facts:['Liberia was founded by formerly enslaved people from the United States in the 1800s.','Its capital, Monrovia, is named after U.S. President James Monroe.','Liberia and Ethiopia are the two oldest republics in Africa.']},
+'434':{n:'Libya',a2:'ly',c:'africa',sr:'Northern Africa',cap:'Tripoli',lang:['Arabic'],pop:'7M',cur:'Libyan Dinar (LYD)',facts:['Libya is the fourth largest country in Africa.','More than 90% of the country is desert.','The ancient Roman ruins of Leptis Magna in Libya are among the best-preserved in the world.']},
+'450':{n:'Madagascar',a2:'mg',c:'africa',sr:'Eastern Africa',cap:'Antananarivo',lang:['Malagasy','French'],pop:'30M',cur:'Malagasy Ariary (MGA)',facts:['Madagascar is the fourth largest island in the world.','About 90% of its wildlife is found nowhere else on Earth, including lemurs.','The island split from India about 88 million years ago.']},
+'454':{n:'Malawi',a2:'mw',c:'africa',sr:'Eastern Africa',cap:'Lilongwe',lang:['English','Chichewa'],pop:'20M',cur:'Malawian Kwacha (MWK)',facts:['Malawi is known as the "Warm Heart of Africa" for the friendliness of its people.','Lake Malawi holds more species of fish than any other lake in the world.','The lake makes up about a third of the country\'s total area.']},
+'466':{n:'Mali',a2:'ml',c:'africa',sr:'Western Africa',cap:'Bamako',lang:['French'],pop:'22M',cur:'West African CFA Franc (XOF)',facts:['The ancient city of Timbuktu in Mali was once a great center of learning and trade.','The Great Mosque of Djenne is the largest mud-brick building in the world.','Mali\'s musical traditions have influenced blues and jazz around the world.']},
+'478':{n:'Mauritania',a2:'mr',c:'africa',sr:'Western Africa',cap:'Nouakchott',lang:['Arabic'],pop:'4.9M',cur:'Mauritanian Ouguiya (MRU)',facts:['Mauritania is mostly covered by the Sahara Desert.','The Richat Structure, also called the "Eye of the Sahara," is a giant circular rock formation visible from space.','Nouakchott is one of the largest cities in the Sahara.']},
+'480':{n:'Mauritius',a2:'mu',c:'africa',sr:'Eastern Africa',cap:'Port Louis',lang:['English','French','Creole'],pop:'1.3M',cur:'Mauritian Rupee (MUR)',facts:['Mauritius is an island nation in the Indian Ocean east of Madagascar.','The dodo bird, now extinct, was found only on Mauritius.','The island has the third-largest coral reef in the world.']},
+'504':{n:'Morocco',a2:'ma',c:'africa',sr:'Northern Africa',cap:'Rabat',lang:['Arabic','Berber'],pop:'37M',cur:'Moroccan Dirham (MAD)',facts:['Morocco is home to the oldest university in the world, the University of al-Qarawiyyin, founded in 859 AD.','The country has both the Sahara Desert and the snow-capped Atlas Mountains.','Moroccan mint tea is a symbol of hospitality and friendship.']},
+'508':{n:'Mozambique',a2:'mz',c:'africa',sr:'Eastern Africa',cap:'Maputo',lang:['Portuguese'],pop:'33M',cur:'Mozambican Metical (MZN)',facts:['Mozambique has the third longest coastline in Africa.','The country\'s flag features an AK-47 rifle, one of the only flags in the world to show a modern weapon.','The Bazaruto Archipelago has some of the most beautiful beaches in Africa.']},
+'516':{n:'Namibia',a2:'na',c:'africa',sr:'Southern Africa',cap:'Windhoek',lang:['English'],pop:'2.6M',cur:'Namibian Dollar (NAD)',facts:['Namibia was the first African country to put environmental protection in its constitution.','The Namib Desert is considered the oldest desert in the world at 55 million years old.','Namibia has the largest free-roaming population of cheetahs in the world.']},
+'562':{n:'Niger',a2:'ne',c:'africa',sr:'Western Africa',cap:'Niamey',lang:['French'],pop:'27M',cur:'West African CFA Franc (XOF)',facts:['Niger is named after the Niger River, the third longest river in Africa.','The Sahara Desert covers about 80% of the country.','Niger has some of the most spectacular dinosaur fossil sites in Africa.']},
+'566':{n:'Nigeria',a2:'ng',c:'africa',sr:'Western Africa',cap:'Abuja',lang:['English'],pop:'224M',cur:'Nigerian Naira (NGN)',facts:['Nigeria is the most populous country in Africa and seventh in the world.','Nollywood, the Nigerian film industry, produces more movies per year than Hollywood.','Nigeria has over 500 different ethnic groups and more than 520 languages spoken.']},
+'646':{n:'Rwanda',a2:'rw',c:'africa',sr:'Eastern Africa',cap:'Kigali',lang:['Kinyarwanda','French','English'],pop:'14M',cur:'Rwandan Franc (RWF)',facts:['Rwanda is known as the "Land of a Thousand Hills" for its beautiful rolling terrain.','Mountain gorillas can be found in Rwanda\'s Volcanoes National Park.','Kigali is considered one of the cleanest cities in Africa.']},
+'686':{n:'Senegal',a2:'sn',c:'africa',sr:'Western Africa',cap:'Dakar',lang:['French'],pop:'18M',cur:'West African CFA Franc (XOF)',facts:['Senegal is the westernmost country on the African mainland.','The Dakar Rally, one of the world\'s most famous car races, was originally run to Dakar.','Senegalese wrestling (laamb) is the national sport and draws huge crowds.']},
+'694':{n:'Sierra Leone',a2:'sl',c:'africa',sr:'Western Africa',cap:'Freetown',lang:['English'],pop:'8.6M',cur:'Sierra Leonean Leone (SLL)',facts:['Sierra Leone means "Lion Mountain" in Portuguese.','Freetown was founded as a home for freed enslaved people in 1792.','The country has some of the most beautiful beaches in West Africa.']},
+'706':{n:'Somalia',a2:'so',c:'africa',sr:'Eastern Africa',cap:'Mogadishu',lang:['Somali','Arabic'],pop:'18M',cur:'Somali Shilling (SOS)',facts:['Somalia has the longest coastline of any country on mainland Africa.','Camels are extremely important in Somali culture, and Somalia has one of the largest camel populations in the world.','Somali people have a rich tradition of poetry, and Somalia is called the "Nation of Poets."']},
+'710':{n:'South Africa',a2:'za',c:'africa',sr:'Southern Africa',cap:'Pretoria',lang:['Zulu','Xhosa','Afrikaans','English','and 7 others'],pop:'60M',cur:'South African Rand (ZAR)',facts:['South Africa has 11 official languages, one of the most in the world.','It is the only country in the world with three capital cities: Pretoria, Cape Town, and Bloemfontein.','Table Mountain in Cape Town is one of the oldest mountains in the world.']},
+'728':{n:'South Sudan',a2:'ss',c:'africa',sr:'Eastern Africa',cap:'Juba',lang:['English'],pop:'11M',cur:'South Sudanese Pound (SSP)',facts:['South Sudan became the world\'s newest country when it gained independence in 2011.','The Sudd is one of the largest wetlands in the world, home to many hippos and crocodiles.','South Sudan has rich cultural traditions with over 60 different ethnic groups.']},
+'729':{n:'Sudan',a2:'sd',c:'africa',sr:'Northern Africa',cap:'Khartoum',lang:['Arabic','English'],pop:'48M',cur:'Sudanese Pound (SDG)',facts:['Sudan has more ancient pyramids than Egypt, with over 200 pyramids in the Meroe region.','The Blue Nile and White Nile meet in Khartoum to form the main Nile River.','Sudan was home to the ancient Kingdom of Kush, a powerful African civilization.']},
+'834':{n:'Tanzania',a2:'tz',c:'africa',sr:'Eastern Africa',cap:'Dodoma',lang:['Swahili','English'],pop:'65M',cur:'Tanzanian Shilling (TZS)',facts:['Mount Kilimanjaro in Tanzania is the tallest mountain in Africa at 5,895 meters.','The Serengeti is home to the largest animal migration on Earth.','Zanzibar, a Tanzanian island, is famous for its spice markets and beautiful beaches.']},
+'768':{n:'Togo',a2:'tg',c:'africa',sr:'Western Africa',cap:'Lome',lang:['French'],pop:'9M',cur:'West African CFA Franc (XOF)',facts:['Togo is one of the smallest countries in Africa, only about 57 km wide.','The Batammariba people build amazing two-story mud houses called Tata Somba.','Togo has a rich tradition of Voodoo festivals and ceremonies.']},
+'788':{n:'Tunisia',a2:'tn',c:'africa',sr:'Northern Africa',cap:'Tunis',lang:['Arabic'],pop:'12M',cur:'Tunisian Dinar (TND)',facts:['Tunisia is the smallest country in North Africa.','The ancient city of Carthage, once a rival to Rome, was located in modern Tunisia.','Star Wars scenes for Tatooine were filmed in the Tunisian desert.']},
+'800':{n:'Uganda',a2:'ug',c:'africa',sr:'Eastern Africa',cap:'Kampala',lang:['English','Swahili'],pop:'49M',cur:'Ugandan Shilling (UGX)',facts:['Uganda is home to about half of the world\'s remaining mountain gorillas.','Lake Victoria, the largest lake in Africa, borders Uganda.','Winston Churchill called Uganda the "Pearl of Africa" for its natural beauty.']},
+'894':{n:'Zambia',a2:'zm',c:'africa',sr:'Eastern Africa',cap:'Lusaka',lang:['English'],pop:'20M',cur:'Zambian Kwacha (ZMW)',facts:['Victoria Falls, one of the largest waterfalls in the world, is on Zambia\'s border with Zimbabwe.','Zambia is home to the South Luangwa National Park, one of the greatest wildlife sanctuaries in the world.','The Zambian flag has an eagle in flight, symbolizing the country\'s freedom.']},
+'716':{n:'Zimbabwe',a2:'zw',c:'africa',sr:'Eastern Africa',cap:'Harare',lang:['English','Shona','Ndebele'],pop:'16M',cur:'Zimbabwe Gold (ZiG)',facts:['Great Zimbabwe, ancient stone ruins, gave the country its name and is one of Africa\'s most important historical sites.','Zimbabwe shares Victoria Falls with Zambia, locally called Mosi-oa-Tunya or "The Smoke That Thunders."','Zimbabwe has rich stone sculpture traditions that are celebrated worldwide.']},
+'132':{n:'Cabo Verde',a2:'cv',c:'africa',sr:'Western Africa',cap:'Praia',lang:['Portuguese'],pop:'600K',cur:'Cape Verdean Escudo (CVE)',facts:['Cabo Verde is a group of 10 volcanic islands in the Atlantic Ocean off the coast of West Africa.','The islands are known for their beautiful music called Morna, similar to Portuguese fado.','Cabo Verde has beaches with black, white, and even red sand.']},
+'174':{n:'Comoros',a2:'km',c:'africa',sr:'Eastern Africa',cap:'Moroni',lang:['Comorian','Arabic','French'],pop:'920K',cur:'Comorian Franc (KMF)',facts:['Comoros is a group of volcanic islands between Madagascar and Mozambique.','The coelacanth, a fish thought to be extinct for 65 million years, was found alive near Comoros.','Comoros is one of the world\'s largest producers of ylang-ylang, used in many perfumes.']},
+'678':{n:'Sao Tome and Principe',a2:'st',c:'africa',sr:'Central Africa',cap:'Sao Tome',lang:['Portuguese'],pop:'230K',cur:'Sao Tomean Dobra (STN)',facts:['Sao Tome and Principe is the smallest country in Africa.','The islands sit right on the Equator in the Gulf of Guinea.','Chocolate made from Sao Tomean cocoa beans is considered some of the finest in the world.']},
+'690':{n:'Seychelles',a2:'sc',c:'africa',sr:'Eastern Africa',cap:'Victoria',lang:['Seychellois Creole','English','French'],pop:'100K',cur:'Seychellois Rupee (SCR)',facts:['Seychelles has the smallest population of any African sovereign state.','The Vallee de Mai on Praslin Island has the unique coco de mer palm, which produces the largest seed in the plant kingdom.','Seychelles is home to the Aldabra giant tortoise, which can live over 100 years.']},
+
+// ── EUROPE ──────────────────────────────────────────
+'8':{n:'Albania',a2:'al',c:'europe',sr:'Southern Europe',cap:'Tirana',lang:['Albanian'],pop:'2.8M',cur:'Albanian Lek (ALL)',facts:['Albania has over 750,000 bunkers built during the Cold War, more per person than any other country.','Mother Teresa, the famous humanitarian, was of Albanian origin.','The Albanian Riviera has beautiful beaches along the Ionian Sea.']},
+'40':{n:'Austria',a2:'at',c:'europe',sr:'Western Europe',cap:'Vienna',lang:['German'],pop:'9.1M',cur:'Euro (EUR)',facts:['Austria is the birthplace of famous composers Mozart, Haydn, Schubert, and Strauss.','The Vienna Boys\' Choir has been performing for over 500 years.','The Alps cover about 62% of Austria\'s total area.']},
+'112':{n:'Belarus',a2:'by',c:'europe',sr:'Eastern Europe',cap:'Minsk',lang:['Belarusian','Russian'],pop:'9.2M',cur:'Belarusian Ruble (BYN)',facts:['Belarus has one of the last and largest ancient forests in Europe called Belovezhskaya Pushcha.','The European bison (wisent) still roams wild in Belarus.','Minsk was almost completely rebuilt after being devastated in World War II.']},
+'56':{n:'Belgium',a2:'be',c:'europe',sr:'Western Europe',cap:'Brussels',lang:['Dutch','French','German'],pop:'11.6M',cur:'Euro (EUR)',facts:['Belgium is famous for its chocolate, waffles, and over 1,500 varieties of beer.','Brussels is the headquarters of the European Union and NATO.','Belgium has three official languages: Dutch, French, and German.']},
+'70':{n:'Bosnia and Herzegovina',a2:'ba',c:'europe',sr:'Southern Europe',cap:'Sarajevo',lang:['Bosnian','Croatian','Serbian'],pop:'3.2M',cur:'Convertible Mark (BAM)',facts:['The old bridge in Mostar, called Stari Most, is a UNESCO World Heritage Site.','Sarajevo hosted the 1984 Winter Olympics.','Bosnia has the last primeval forest in Europe called Perucica.']},
+'100':{n:'Bulgaria',a2:'bg',c:'europe',sr:'Eastern Europe',cap:'Sofia',lang:['Bulgarian'],pop:'6.5M',cur:'Bulgarian Lev (BGN)',facts:['Bulgaria is the oldest country in Europe that has never changed its name since it was first established in 681 AD.','Bulgarians shake their heads to mean "yes" and nod to mean "no."','Bulgaria produces most of the world\'s rose oil used in perfumes.']},
+'191':{n:'Croatia',a2:'hr',c:'europe',sr:'Southern Europe',cap:'Zagreb',lang:['Croatian'],pop:'3.9M',cur:'Euro (EUR)',facts:['Croatia has over 1,200 islands along its Adriatic coast.','The necktie was invented in Croatia, originally worn by Croatian soldiers.','Dubrovnik was a filming location for King\'s Landing in Game of Thrones.']},
+'196':{n:'Cyprus',a2:'cy',c:'europe',sr:'Southern Europe',cap:'Nicosia',lang:['Greek','Turkish'],pop:'1.3M',cur:'Euro (EUR)',facts:['Cyprus is the third largest island in the Mediterranean Sea.','According to Greek mythology, the goddess Aphrodite was born from the sea foam near Cyprus.','Nicosia is the last divided capital city in the world.']},
+'203':{n:'Czech Republic',a2:'cz',c:'europe',sr:'Eastern Europe',cap:'Prague',lang:['Czech'],pop:'10.5M',cur:'Czech Koruna (CZK)',facts:['Prague Castle is the largest ancient castle in the world according to the Guinness Book of Records.','Czech Republic (Czechia) is the country that drinks the most beer per person in the world.','Contact lenses were invented by a Czech chemist.']},
+'208':{n:'Denmark',a2:'dk',c:'europe',sr:'Northern Europe',cap:'Copenhagen',lang:['Danish'],pop:'5.9M',cur:'Danish Krone (DKK)',facts:['LEGO was invented in Denmark, and the name comes from the Danish words "leg godt" meaning "play well."','Denmark is one of the happiest countries in the world.','The Little Mermaid statue in Copenhagen harbor is one of the most visited landmarks in Europe.']},
+'233':{n:'Estonia',a2:'ee',c:'europe',sr:'Northern Europe',cap:'Tallinn',lang:['Estonian'],pop:'1.3M',cur:'Euro (EUR)',facts:['Estonia is one of the most digitally advanced countries in the world.','Tallinn\'s Old Town is one of the best-preserved medieval cities in Europe.','Estonia has over 1,500 islands and more than 1,200 lakes.']},
+'246':{n:'Finland',a2:'fi',c:'europe',sr:'Northern Europe',cap:'Helsinki',lang:['Finnish','Swedish'],pop:'5.6M',cur:'Euro (EUR)',facts:['Finland is called the "Land of a Thousand Lakes" but actually has about 188,000 lakes.','Santa Claus officially lives in Rovaniemi, Finnish Lapland.','Finland has the most saunas per person of any country, with about 3 million saunas for 5.6 million people.']},
+'250':{n:'France',a2:'fr',c:'europe',sr:'Western Europe',cap:'Paris',lang:['French'],pop:'68M',cur:'Euro (EUR)',facts:['The Eiffel Tower was built in 1889 and is visited by about 7 million people every year.','France is famous for its cheese with over 1,000 different kinds.','The Tour de France bicycle race has been held every year since 1903.']},
+'276':{n:'Germany',a2:'de',c:'europe',sr:'Western Europe',cap:'Berlin',lang:['German'],pop:'84M',cur:'Euro (EUR)',facts:['Germany has over 1,500 different types of beer and over 300 varieties of bread.','The first printed book, the Gutenberg Bible, was made in Germany around 1455.','Germany has over 20,000 castles and is home to the famous Neuschwanstein Castle that inspired Disney.']},
+'300':{n:'Greece',a2:'gr',c:'europe',sr:'Southern Europe',cap:'Athens',lang:['Greek'],pop:'10.4M',cur:'Euro (EUR)',facts:['The Olympic Games started in ancient Greece in 776 BC.','Greece has more than 6,000 islands, but only about 227 are inhabited.','Ancient Greeks invented democracy, theater, and the foundations of Western philosophy.']},
+'348':{n:'Hungary',a2:'hu',c:'europe',sr:'Eastern Europe',cap:'Budapest',lang:['Hungarian'],pop:'9.6M',cur:'Hungarian Forint (HUF)',facts:['Hungary invented the Rubik\'s Cube, created by Erno Rubik in 1974.','Budapest has one of the oldest subway systems in the world, built in 1896.','Hungary has the largest thermal water cave system in the world.']},
+'352':{n:'Iceland',a2:'is',c:'europe',sr:'Northern Europe',cap:'Reykjavik',lang:['Icelandic'],pop:'380K',cur:'Icelandic Krona (ISK)',facts:['Iceland has no mosquitoes and no standing army.','It has more than 130 volcanoes and gets much of its energy from geothermal hot springs.','The Icelandic language has barely changed in 1,000 years, so modern Icelanders can still read ancient Viking texts.']},
+'372':{n:'Ireland',a2:'ie',c:'europe',sr:'Northern Europe',cap:'Dublin',lang:['Irish','English'],pop:'5.1M',cur:'Euro (EUR)',facts:['The Irish harp is the national symbol of Ireland and appears on every Irish euro coin.','Ireland is known as the Emerald Isle because of its lush green countryside.','Halloween originated from the ancient Celtic festival of Samhain in Ireland.']},
+'380':{n:'Italy',a2:'it',c:'europe',sr:'Southern Europe',cap:'Rome',lang:['Italian'],pop:'59M',cur:'Euro (EUR)',facts:['Italy has more UNESCO World Heritage Sites than any other country in the world.','Pizza and pasta both originated in Italy, with pizza invented in Naples.','The Colosseum in Rome could seat about 50,000 spectators for gladiator contests.']},
+'428':{n:'Latvia',a2:'lv',c:'europe',sr:'Northern Europe',cap:'Riga',lang:['Latvian'],pop:'1.8M',cur:'Euro (EUR)',facts:['Latvia is one of the greenest countries in Europe, with forests covering about half the country.','Riga has one of the largest collections of Art Nouveau architecture in the world.','The Latvian song and dance festival brings together over 40,000 performers.']},
+'440':{n:'Lithuania',a2:'lt',c:'europe',sr:'Northern Europe',cap:'Vilnius',lang:['Lithuanian'],pop:'2.8M',cur:'Euro (EUR)',facts:['Lithuanian is one of the oldest living languages in the world.','Lithuania was the last country in Europe to adopt Christianity, in 1387.','Basketball is the most popular sport and almost a national religion in Lithuania.']},
+'442':{n:'Luxembourg',a2:'lu',c:'europe',sr:'Western Europe',cap:'Luxembourg City',lang:['Luxembourgish','French','German'],pop:'660K',cur:'Euro (EUR)',facts:['Luxembourg is one of the smallest countries in Europe but one of the richest per person.','It has three official languages: Luxembourgish, French, and German.','Luxembourg City has dramatic gorges running through the middle of the city.']},
+'498':{n:'Moldova',a2:'md',c:'europe',sr:'Eastern Europe',cap:'Chisinau',lang:['Romanian'],pop:'2.6M',cur:'Moldovan Leu (MDL)',facts:['Moldova has one of the largest wine cellars in the world at Milestii Mici with over 200 km of underground tunnels.','The country is one of the least visited in Europe, making it a hidden gem.','Moldova is famous for its warm hospitality and homemade wines.']},
+'499':{n:'Montenegro',a2:'me',c:'europe',sr:'Southern Europe',cap:'Podgorica',lang:['Montenegrin'],pop:'620K',cur:'Euro (EUR)',facts:['Montenegro means "Black Mountain" and it has some of Europe\'s most dramatic mountain scenery.','The Bay of Kotor is sometimes called the southernmost fjord in Europe.','Montenegro has one of the deepest canyons in Europe, the Tara River Canyon.']},
+'528':{n:'Netherlands',a2:'nl',c:'europe',sr:'Western Europe',cap:'Amsterdam',lang:['Dutch'],pop:'17.6M',cur:'Euro (EUR)',facts:['About one-third of the Netherlands is below sea level, protected by dikes and sea walls.','The Dutch are the tallest people in the world on average.','There are more bicycles than people in the Netherlands.']},
+'807':{n:'North Macedonia',a2:'mk',c:'europe',sr:'Southern Europe',cap:'Skopje',lang:['Macedonian','Albanian'],pop:'1.8M',cur:'Macedonian Denar (MKD)',facts:['North Macedonia is home to Lake Ohrid, one of the oldest and deepest lakes in Europe.','Mother Teresa was born in Skopje in 1910.','The country has more mountains, valleys, and rivers than flat land.']},
+'578':{n:'Norway',a2:'no',c:'europe',sr:'Northern Europe',cap:'Oslo',lang:['Norwegian'],pop:'5.5M',cur:'Norwegian Krone (NOK)',facts:['Norway has some of the most spectacular fjords in the world carved by ancient glaciers.','The Northern Lights (Aurora Borealis) can be seen in northern Norway.','Norway gave the Statue of Liberty\'s copper exterior its final green coating recipe.']},
+'616':{n:'Poland',a2:'pl',c:'europe',sr:'Eastern Europe',cap:'Warsaw',lang:['Polish'],pop:'37M',cur:'Polish Zloty (PLN)',facts:['Poland is home to the largest castle in the world by land area, Malbork Castle.','Marie Curie, the first person to win two Nobel Prizes, was Polish.','Poland has one of the oldest salt mines in the world at Wieliczka with underground chapels carved from salt.']},
+'620':{n:'Portugal',a2:'pt',c:'europe',sr:'Southern Europe',cap:'Lisbon',lang:['Portuguese'],pop:'10.3M',cur:'Euro (EUR)',facts:['Portugal is the oldest country in Europe with the same defined borders since 1139.','Portuguese explorers were the first Europeans to reach Japan, India by sea, and Brazil.','Portugal is the world\'s largest cork producer, making about half the world\'s supply.']},
+'642':{n:'Romania',a2:'ro',c:'europe',sr:'Eastern Europe',cap:'Bucharest',lang:['Romanian'],pop:'19M',cur:'Romanian Leu (RON)',facts:['Bran Castle in Romania is often associated with the legend of Count Dracula.','Romania has one of the largest populations of brown bears in Europe.','The Palace of the Parliament in Bucharest is the heaviest building in the world.']},
+'688':{n:'Serbia',a2:'rs',c:'europe',sr:'Southern Europe',cap:'Belgrade',lang:['Serbian'],pop:'6.6M',cur:'Serbian Dinar (RSD)',facts:['Serbia is the birthplace of Nikola Tesla, the famous inventor and electrical engineer.','Belgrade is one of the oldest continuously inhabited cities in Europe.','Serbia has a tradition of celebrating "Slava," a family patron saint day unique in the world.']},
+'703':{n:'Slovakia',a2:'sk',c:'europe',sr:'Eastern Europe',cap:'Bratislava',lang:['Slovak'],pop:'5.4M',cur:'Euro (EUR)',facts:['Slovakia has more castles and chateaux per person than any other country in the world.','Bratislava is the only capital city that borders two other countries (Austria and Hungary).','The Dobsinska Ice Cave in Slovakia is a UNESCO World Heritage Site.']},
+'705':{n:'Slovenia',a2:'si',c:'europe',sr:'Southern Europe',cap:'Ljubljana',lang:['Slovenian'],pop:'2.1M',cur:'Euro (EUR)',facts:['Over 60% of Slovenia is covered by forest, making it one of the greenest countries in Europe.','Slovenia has a dragon on the coat of arms of its capital city, Ljubljana.','Lake Bled with its fairy-tale island church is one of the most photographed places in Europe.']},
+'724':{n:'Spain',a2:'es',c:'europe',sr:'Southern Europe',cap:'Madrid',lang:['Spanish'],pop:'47M',cur:'Euro (EUR)',facts:['Spain has the second most UNESCO World Heritage Sites in the world.','La Tomatina is an annual festival where people throw tomatoes at each other.','Spanish is the fourth most spoken language in the world with over 500 million speakers.']},
+'752':{n:'Sweden',a2:'se',c:'europe',sr:'Northern Europe',cap:'Stockholm',lang:['Swedish'],pop:'10.5M',cur:'Swedish Krona (SEK)',facts:['Sweden is home to the Icehotel, rebuilt every year from ice blocks from the Torne River.','IKEA, Spotify, and Minecraft all come from Sweden.','Sweden has a tradition called Fika, a daily coffee-and-pastry break that is an important part of social life.']},
+'756':{n:'Switzerland',a2:'ch',c:'europe',sr:'Western Europe',cap:'Bern',lang:['German','French','Italian','Romansh'],pop:'8.8M',cur:'Swiss Franc (CHF)',facts:['Switzerland has four official languages: German, French, Italian, and Romansh.','The country has been neutral (not taking sides in wars) since 1815.','Switzerland is famous for chocolate, cheese, and watches.']},
+'792':{n:'Turkey',a2:'tr',c:'europe',sr:'Southern Europe',cap:'Ankara',lang:['Turkish'],pop:'85M',cur:'Turkish Lira (TRY)',facts:['Turkey sits on two continents: Europe and Asia, with Istanbul straddling the divide.','Tulips originally came from Turkey, not the Netherlands.','Turkey is home to one of the Seven Wonders of the Ancient World: the Temple of Artemis at Ephesus.']},
+'804':{n:'Ukraine',a2:'ua',c:'europe',sr:'Eastern Europe',cap:'Kyiv',lang:['Ukrainian'],pop:'37M',cur:'Ukrainian Hryvnia (UAH)',facts:['Ukraine is the largest country entirely within Europe.','The city of Lviv has over 100 churches, making it one of the most architecturally rich cities in Eastern Europe.','Ukraine is one of the world\'s largest producers of sunflower seeds and sunflower oil.']},
+'826':{n:'United Kingdom',a2:'gb',c:'europe',sr:'Northern Europe',cap:'London',lang:['English'],pop:'68M',cur:'Pound Sterling (GBP)',facts:['The United Kingdom is made up of four countries: England, Scotland, Wales, and Northern Ireland.','London\'s Big Ben is one of the most famous clocks in the world.','The UK invented football (soccer), rugby, cricket, tennis, and golf.']},
+'20':{n:'Andorra',a2:'ad',c:'europe',sr:'Southern Europe',cap:'Andorra la Vella',lang:['Catalan'],pop:'80K',cur:'Euro (EUR)',facts:['Andorra is a tiny country tucked in the Pyrenees Mountains between France and Spain.','It has no airport, no railway, and no military.','Andorra la Vella is the highest capital city in Europe.']},
+'438':{n:'Liechtenstein',a2:'li',c:'europe',sr:'Western Europe',cap:'Vaduz',lang:['German'],pop:'40K',cur:'Swiss Franc (CHF)',facts:['Liechtenstein is one of the smallest countries in the world, only about 160 square kilometers.','It is one of only two doubly landlocked countries in the world.','Liechtenstein has more registered companies than people.']},
+'470':{n:'Malta',a2:'mt',c:'europe',sr:'Southern Europe',cap:'Valletta',lang:['Maltese','English'],pop:'530K',cur:'Euro (EUR)',facts:['Malta is a small island nation in the Mediterranean Sea south of Sicily.','The Maltese language is the only Semitic language written in the Latin alphabet.','Malta has some of the oldest free-standing structures in the world, older than the pyramids.']},
+'492':{n:'Monaco',a2:'mc',c:'europe',sr:'Western Europe',cap:'Monaco',lang:['French'],pop:'40K',cur:'Euro (EUR)',facts:['Monaco is the second smallest country in the world after Vatican City.','The Monaco Grand Prix is one of the most famous car races in the world, racing through city streets.','Monaco has the highest population density of any country in the world.']},
+
+// ── ASIA ────────────────────────────────────────────
+'4':{n:'Afghanistan',a2:'af',c:'asia',sr:'Southern Asia',cap:'Kabul',lang:['Pashto','Dari'],pop:'42M',cur:'Afghan Afghani (AFN)',facts:['Afghanistan is home to the Hindu Kush mountain range with peaks over 7,000 meters.','Buzkashi, a sport played on horseback with a goat, is the national sport.','The Bamiyan Valley once held giant Buddha statues carved into cliffs over 1,500 years ago.']},
+'51':{n:'Armenia',a2:'am',c:'asia',sr:'Western Asia',cap:'Yerevan',lang:['Armenian'],pop:'3M',cur:'Armenian Dram (AMD)',facts:['Armenia was the first country in the world to adopt Christianity as its state religion in 301 AD.','The Armenian alphabet was created in 405 AD and has 39 letters.','Mount Ararat, a symbol of Armenia, is where Noah\'s Ark is said to have landed.']},
+'31':{n:'Azerbaijan',a2:'az',c:'asia',sr:'Western Asia',cap:'Baku',lang:['Azerbaijani'],pop:'10.2M',cur:'Azerbaijani Manat (AZN)',facts:['Azerbaijan is known as the "Land of Fire" because of its natural gas fires that burn on hillsides.','Baku has ultra-modern buildings including the Flame Towers shaped like fire.','Azerbaijan was the first Muslim-majority country to grant women the right to vote in 1918.']},
+'50':{n:'Bangladesh',a2:'bd',c:'asia',sr:'Southern Asia',cap:'Dhaka',lang:['Bengali'],pop:'173M',cur:'Bangladeshi Taka (BDT)',facts:['Bangladesh is one of the most densely populated countries in the world.','The Sundarbans, the world\'s largest mangrove forest and home to Bengal tigers, is in Bangladesh.','The national flower is the white water lily, found floating in rivers across the country.']},
+'64':{n:'Bhutan',a2:'bt',c:'asia',sr:'Southern Asia',cap:'Thimphu',lang:['Dzongkha'],pop:'790K',cur:'Bhutanese Ngultrum (BTN)',facts:['Bhutan measures its success by Gross National Happiness instead of money.','Television and the internet were not introduced until 1999.','Bhutan is the only carbon-negative country in the world, absorbing more CO2 than it produces.']},
+'96':{n:'Brunei',a2:'bn',c:'asia',sr:'South-Eastern Asia',cap:'Bandar Seri Begawan',lang:['Malay'],pop:'450K',cur:'Brunei Dollar (BND)',facts:['The Sultan of Brunei lives in the largest residential palace in the world with 1,788 rooms.','Brunei is one of the wealthiest countries per person thanks to its oil and gas reserves.','The country is covered by tropical rainforest that is some of the oldest in the world.']},
+'116':{n:'Cambodia',a2:'kh',c:'asia',sr:'South-Eastern Asia',cap:'Phnom Penh',lang:['Khmer'],pop:'17M',cur:'Cambodian Riel (KHR)',facts:['Angkor Wat in Cambodia is the largest religious monument in the world.','The Cambodian flag is one of the only national flags to feature a building.','Cambodia\'s Tonle Sap Lake doubles in size during the monsoon season.']},
+'156':{n:'China',a2:'cn',c:'asia',sr:'Eastern Asia',cap:'Beijing',lang:['Mandarin Chinese'],pop:'1.4B',cur:'Chinese Yuan (CNY)',facts:['The Great Wall of China is over 21,000 kilometers long and was built over many centuries.','China invented paper, printing, gunpowder, and the compass.','The giant panda, one of the world\'s most loved animals, is found only in China.']},
+'268':{n:'Georgia',a2:'ge',c:'asia',sr:'Western Asia',cap:'Tbilisi',lang:['Georgian'],pop:'3.7M',cur:'Georgian Lari (GEL)',facts:['Georgia is one of the oldest wine-producing regions in the world, making wine for over 8,000 years.','The Georgian alphabet is one of only 14 unique writing systems still in use today.','Georgia is home to ancient cave cities carved into cliffsides.']},
+'356':{n:'India',a2:'in',c:'asia',sr:'Southern Asia',cap:'New Delhi',lang:['Hindi','English'],pop:'1.4B',cur:'Indian Rupee (INR)',facts:['India is the most populous country in the world.','The Taj Mahal, one of the New Seven Wonders of the World, was built as a monument of love.','India invented the number system we use today, including the concept of zero.']},
+'360':{n:'Indonesia',a2:'id',c:'asia',sr:'South-Eastern Asia',cap:'Jakarta',lang:['Indonesian'],pop:'277M',cur:'Indonesian Rupiah (IDR)',facts:['Indonesia is the largest archipelago in the world with over 17,000 islands.','Komodo dragons, the largest lizards on Earth, are found on Indonesian islands.','Indonesia has the most active volcanoes of any country.']},
+'364':{n:'Iran',a2:'ir',c:'asia',sr:'Southern Asia',cap:'Tehran',lang:['Persian (Farsi)'],pop:'88M',cur:'Iranian Rial (IRR)',facts:['Iran is home to one of the oldest civilizations in the world, dating back over 7,000 years.','The Persian Empire was once the largest empire in ancient history.','Iran invented the ice cream treat called faloodeh, which is over 2,000 years old.']},
+'368':{n:'Iraq',a2:'iq',c:'asia',sr:'Western Asia',cap:'Baghdad',lang:['Arabic','Kurdish'],pop:'44M',cur:'Iraqi Dinar (IQD)',facts:['Iraq is home to ancient Mesopotamia, known as the "Cradle of Civilization."','Writing, the wheel, and mathematics were all invented in ancient Iraq.','The Marshlands of southern Iraq are a unique wetland ecosystem and UNESCO World Heritage Site.']},
+'376':{n:'Israel',a2:'il',c:'asia',sr:'Western Asia',cap:'Jerusalem',lang:['Hebrew','Arabic'],pop:'9.4M',cur:'Israeli New Shekel (ILS)',facts:['Israel is about the same size as New Jersey but has an incredible variety of landscapes.','The Dead Sea, on Israel\'s border, is the lowest point on land and so salty you float in it.','Israel revived Hebrew as a spoken language after it hadn\'t been used in daily life for centuries.']},
+'392':{n:'Japan',a2:'jp',c:'asia',sr:'Eastern Asia',cap:'Tokyo',lang:['Japanese'],pop:'124M',cur:'Japanese Yen (JPY)',facts:['Japan is made up of 6,852 islands and has more than 100 active volcanoes.','Japan has the world\'s oldest company, Kongo Gumi, founded in 578 AD.','Vending machines in Japan sell everything from hot food to umbrellas and fresh eggs.']},
+'400':{n:'Jordan',a2:'jo',c:'asia',sr:'Western Asia',cap:'Amman',lang:['Arabic'],pop:'11M',cur:'Jordanian Dinar (JOD)',facts:['Petra, an ancient city carved into pink rock cliffs, is one of the New Seven Wonders of the World.','The Dead Sea shoreline is the lowest dry point on Earth at about 430 meters below sea level.','Jordan is one of the most welcoming countries in the Middle East for visitors.']},
+'398':{n:'Kazakhstan',a2:'kz',c:'asia',sr:'Central Asia',cap:'Astana',lang:['Kazakh','Russian'],pop:'20M',cur:'Kazakhstani Tenge (KZT)',facts:['Kazakhstan is the largest landlocked country in the world.','Apples originated in Kazakhstan, and the former capital Almaty means "Father of Apples."','The Baikonur Cosmodrome in Kazakhstan is the world\'s oldest and largest space launch facility.']},
+'414':{n:'Kuwait',a2:'kw',c:'asia',sr:'Western Asia',cap:'Kuwait City',lang:['Arabic'],pop:'4.3M',cur:'Kuwaiti Dinar (KWD)',facts:['Kuwait has about 10% of the world\'s proven oil reserves.','The Kuwaiti Dinar is the highest-valued currency unit in the world.','Kuwait Towers are an iconic landmark and symbol of modern Kuwait.']},
+'417':{n:'Kyrgyzstan',a2:'kg',c:'asia',sr:'Central Asia',cap:'Bishkek',lang:['Kyrgyz','Russian'],pop:'7M',cur:'Kyrgyzstani Som (KGS)',facts:['Kyrgyzstan is home to beautiful mountain lakes including Issyk-Kul, one of the largest alpine lakes in the world.','The country has a strong tradition of eagle hunting, where trained golden eagles catch prey.','Traditional yurts (round portable tents) are still used by nomadic herders in the mountains.']},
+'418':{n:'Laos',a2:'la',c:'asia',sr:'South-Eastern Asia',cap:'Vientiane',lang:['Lao'],pop:'7.5M',cur:'Lao Kip (LAK)',facts:['Laos is the most heavily bombed country per person in history due to the Vietnam War era.','The Plain of Jars has thousands of mysterious giant stone jars scattered across the landscape.','The Mekong River runs through Laos and is home to the giant Mekong catfish.']},
+'422':{n:'Lebanon',a2:'lb',c:'asia',sr:'Western Asia',cap:'Beirut',lang:['Arabic'],pop:'5.5M',cur:'Lebanese Pound (LBP)',facts:['Lebanon is home to some of the oldest continuously inhabited cities in the world, including Byblos.','The famous Cedars of Lebanon are mentioned in many ancient texts and appear on the national flag.','Lebanese cuisine, including hummus, falafel, and tabbouleh, is enjoyed worldwide.']},
+'458':{n:'Malaysia',a2:'my',c:'asia',sr:'South-Eastern Asia',cap:'Kuala Lumpur',lang:['Malay'],pop:'34M',cur:'Malaysian Ringgit (MYR)',facts:['The Petronas Twin Towers in Kuala Lumpur were the world\'s tallest buildings from 1998 to 2004.','Malaysia has some of the oldest tropical rainforests in the world, around 130 million years old.','Malaysia is home to the Rafflesia, the world\'s largest flower, which can grow up to 1 meter wide.']},
+'496':{n:'Mongolia',a2:'mn',c:'asia',sr:'Eastern Asia',cap:'Ulaanbaatar',lang:['Mongolian'],pop:'3.4M',cur:'Mongolian Tugrik (MNT)',facts:['Mongolia is the most sparsely populated country in the world.','Genghis Khan founded the Mongol Empire, the largest contiguous land empire in history.','Many Mongolians still live as nomadic herders, moving with their livestock across the vast steppes.']},
+'104':{n:'Myanmar',a2:'mm',c:'asia',sr:'South-Eastern Asia',cap:'Naypyidaw',lang:['Burmese'],pop:'55M',cur:'Myanmar Kyat (MMK)',facts:['Myanmar has over 10,000 Buddhist temples and pagodas.','The golden Shwedagon Pagoda in Yangon is one of the most sacred Buddhist sites in the world.','Myanmar is one of only three countries that don\'t officially use the metric system.']},
+'524':{n:'Nepal',a2:'np',c:'asia',sr:'Southern Asia',cap:'Kathmandu',lang:['Nepali'],pop:'30M',cur:'Nepalese Rupee (NPR)',facts:['Nepal is home to Mount Everest, the tallest mountain in the world at 8,849 meters.','Nepal\'s flag is the only national flag in the world that is not rectangular or square.','Lumbini in Nepal is the birthplace of Siddhartha Gautama, who became the Buddha.']},
+'408':{n:'North Korea',a2:'kp',c:'asia',sr:'Eastern Asia',cap:'Pyongyang',lang:['Korean'],pop:'26M',cur:'North Korean Won (KPW)',facts:['North Korea has a very unique calendar system that starts from the birth year of its founder.','Mount Paektu, a volcanic mountain, is considered sacred in Korean culture.','Pyongyang has one of the deepest metro systems in the world, over 100 meters underground.']},
+'512':{n:'Oman',a2:'om',c:'asia',sr:'Western Asia',cap:'Muscat',lang:['Arabic'],pop:'4.6M',cur:'Omani Rial (OMR)',facts:['Oman has some of the most beautiful desert landscapes and wadis (oases) in the Middle East.','Frankincense, a precious resin used since ancient times, comes from trees in Oman.','The Sultan Qaboos Grand Mosque has one of the largest hand-woven carpets in the world.']},
+'586':{n:'Pakistan',a2:'pk',c:'asia',sr:'Southern Asia',cap:'Islamabad',lang:['Urdu','English'],pop:'230M',cur:'Pakistani Rupee (PKR)',facts:['Pakistan is home to K2, the second tallest mountain in the world.','The Indus Valley Civilization, one of the world\'s oldest, flourished in what is now Pakistan.','Pakistan has the world\'s highest paved international road, the Karakoram Highway.']},
+'608':{n:'Philippines',a2:'ph',c:'asia',sr:'South-Eastern Asia',cap:'Manila',lang:['Filipino','English'],pop:'117M',cur:'Philippine Peso (PHP)',facts:['The Philippines has over 7,600 islands.','The Philippine Eagle is one of the largest and most powerful eagles in the world.','Filipinos celebrate the longest Christmas season in the world, starting in September.']},
+'634':{n:'Qatar',a2:'qa',c:'asia',sr:'Western Asia',cap:'Doha',lang:['Arabic'],pop:'3M',cur:'Qatari Riyal (QAR)',facts:['Qatar is one of the richest countries in the world per person due to its natural gas reserves.','Qatar hosted the 2022 FIFA World Cup, the first in the Middle East.','The country is a small peninsula sticking out into the Persian Gulf.']},
+'643':{n:'Russia',a2:'ru',c:'asia',sr:'Eastern Asia',cap:'Moscow',lang:['Russian'],pop:'144M',cur:'Russian Ruble (RUB)',facts:['Russia is the largest country in the world by area, spanning 11 time zones.','Lake Baikal in Russia is the deepest and oldest freshwater lake in the world.','The Trans-Siberian Railway is the longest railway line in the world at over 9,000 km.']},
+'682':{n:'Saudi Arabia',a2:'sa',c:'asia',sr:'Western Asia',cap:'Riyadh',lang:['Arabic'],pop:'36M',cur:'Saudi Riyal (SAR)',facts:['Saudi Arabia has the largest continuous sand desert in the world, the Rub\' al Khali (Empty Quarter).','The country has no rivers or permanent bodies of fresh water.','Mecca and Medina, the two holiest cities in Islam, are in Saudi Arabia.']},
+'410':{n:'South Korea',a2:'kr',c:'asia',sr:'Eastern Asia',cap:'Seoul',lang:['Korean'],pop:'52M',cur:'South Korean Won (KRW)',facts:['South Korea invented the world\'s first metal movable type printing, even before Gutenberg.','K-pop and Korean culture (the "Korean Wave") are popular all around the world.','South Korea has the fastest average internet speed in the world.']},
+'144':{n:'Sri Lanka',a2:'lk',c:'asia',sr:'Southern Asia',cap:'Sri Jayawardenepura Kotte',lang:['Sinhala','Tamil'],pop:'22M',cur:'Sri Lankan Rupee (LKR)',facts:['Sri Lanka is known as the "Pearl of the Indian Ocean" for its natural beauty.','The country produces some of the finest tea in the world, called Ceylon tea.','Sri Lanka has one of the highest rates of biodiversity in Asia.']},
+'760':{n:'Syria',a2:'sy',c:'asia',sr:'Western Asia',cap:'Damascus',lang:['Arabic'],pop:'23M',cur:'Syrian Pound (SYP)',facts:['Damascus is one of the oldest continuously inhabited cities in the world, over 5,000 years old.','Syria was part of the ancient Silk Road trade route connecting East and West.','The Umayyad Mosque in Damascus is one of the oldest and largest mosques in the world.']},
+'158':{n:'Taiwan',a2:'tw',c:'asia',sr:'Eastern Asia',cap:'Taipei',lang:['Mandarin Chinese'],pop:'24M',cur:'New Taiwan Dollar (TWD)',facts:['Taiwan has more convenience stores per person than almost anywhere in the world.','Taipei 101 was the world\'s tallest building from 2004 to 2010.','Taiwan\'s night markets are famous for incredible street food.']},
+'762':{n:'Tajikistan',a2:'tj',c:'asia',sr:'Central Asia',cap:'Dushanbe',lang:['Tajik'],pop:'10M',cur:'Tajikistani Somoni (TJS)',facts:['About 93% of Tajikistan is covered by mountains.','The Pamir Highway is one of the highest and most remote roads in the world.','Tajikistan has huge glaciers that are an important source of fresh water for Central Asia.']},
+'764':{n:'Thailand',a2:'th',c:'asia',sr:'South-Eastern Asia',cap:'Bangkok',lang:['Thai'],pop:'72M',cur:'Thai Baht (THB)',facts:['Thailand is the only Southeast Asian country that was never colonized by a European power.','Thai food is famous around the world, especially Pad Thai, Tom Yum soup, and green curry.','Thailand has over 40,000 Buddhist temples.']},
+'626':{n:'Timor-Leste',a2:'tl',c:'asia',sr:'South-Eastern Asia',cap:'Dili',lang:['Portuguese','Tetum'],pop:'1.3M',cur:'United States Dollar (USD)',facts:['Timor-Leste (East Timor) became the first new country of the 21st century when it gained independence in 2002.','The island has some of the most biodiverse coral reefs in the world.','Coffee is the country\'s most important export.']},
+'795':{n:'Turkmenistan',a2:'tm',c:'asia',sr:'Central Asia',cap:'Ashgabat',lang:['Turkmen'],pop:'6.4M',cur:'Turkmenistan Manat (TMT)',facts:['The Darvaza Gas Crater, called the "Door to Hell," has been burning since 1971.','Ashgabat holds the Guinness World Record for the most marble-clad buildings.','The Karakum Desert covers about 70% of the country.']},
+'784':{n:'United Arab Emirates',a2:'ae',c:'asia',sr:'Western Asia',cap:'Abu Dhabi',lang:['Arabic'],pop:'10M',cur:'UAE Dirham (AED)',facts:['The Burj Khalifa in Dubai is the tallest building in the world at 828 meters.','Dubai has built artificial palm-shaped islands that are visible from space.','The UAE went from a desert trading post to a modern global hub in just a few decades.']},
+'860':{n:'Uzbekistan',a2:'uz',c:'asia',sr:'Central Asia',cap:'Tashkent',lang:['Uzbek'],pop:'35M',cur:'Uzbekistani Som (UZS)',facts:['Uzbekistan has stunning ancient Silk Road cities like Samarkand and Bukhara.','The Registan in Samarkand is one of the most beautiful public squares in the world.','Uzbekistan is one of only two doubly landlocked countries (surrounded entirely by other landlocked countries).']},
+'704':{n:'Vietnam',a2:'vn',c:'asia',sr:'South-Eastern Asia',cap:'Hanoi',lang:['Vietnamese'],pop:'100M',cur:'Vietnamese Dong (VND)',facts:['Ha Long Bay has over 1,600 limestone islands and is a UNESCO World Heritage Site.','Vietnam is the world\'s second largest coffee producer after Brazil.','Pho, a delicious Vietnamese noodle soup, is eaten for breakfast, lunch, and dinner.']},
+'887':{n:'Yemen',a2:'ye',c:'asia',sr:'Western Asia',cap:'Sanaa',lang:['Arabic'],pop:'34M',cur:'Yemeni Rial (YER)',facts:['Sanaa\'s Old City has been inhabited for over 2,500 years and has unique multi-story tower houses.','Yemen was the ancient home of the Kingdom of Sheba, mentioned in many historical texts.','Socotra Island has plants found nowhere else on Earth, like the dragon blood tree.']},
+'48':{n:'Bahrain',a2:'bh',c:'asia',sr:'Western Asia',cap:'Manama',lang:['Arabic'],pop:'1.5M',cur:'Bahraini Dinar (BHD)',facts:['Bahrain is an island nation in the Persian Gulf connected to Saudi Arabia by a 25 km bridge.','The Tree of Life in Bahrain is a 400-year-old tree that survives in the desert with no obvious water source.','Bahrain was one of the first places in the Persian Gulf to discover oil.']},
+'462':{n:'Maldives',a2:'mv',c:'asia',sr:'Southern Asia',cap:'Male',lang:['Dhivehi'],pop:'520K',cur:'Maldivian Rufiyaa (MVR)',facts:['The Maldives is the lowest-lying country in the world, averaging just 1.5 meters above sea level.','It is made up of about 1,200 coral islands grouped into 26 atolls.','The Maldives has some of the clearest water and most beautiful beaches in the world.']},
+'702':{n:'Singapore',a2:'sg',c:'asia',sr:'South-Eastern Asia',cap:'Singapore',lang:['English','Malay','Mandarin','Tamil'],pop:'5.9M',cur:'Singapore Dollar (SGD)',facts:['Singapore is a city-state, meaning the whole country is one city.','It has one of the world\'s most efficient public transport systems and is known as the "Garden City."','Chewing gum is banned in Singapore to keep the streets clean.']},
+
+// ── NORTH AMERICA ───────────────────────────────────
+'44':{n:'Bahamas',a2:'bs',c:'northAmerica',sr:'Caribbean',cap:'Nassau',lang:['English'],pop:'410K',cur:'Bahamian Dollar (BSD)',facts:['The Bahamas is made up of about 700 islands and over 2,000 small rocky islands called cays.','The water is so clear you can see the bottom from high above, creating the famous turquoise color.','Swimming pigs on Big Major Cay are one of the country\'s most unusual tourist attractions.']},
+'84':{n:'Belize',a2:'bz',c:'northAmerica',sr:'Central America',cap:'Belmopan',lang:['English'],pop:'410K',cur:'Belize Dollar (BZD)',facts:['Belize has the second largest barrier reef in the world.','The Great Blue Hole is a giant underwater sinkhole visible from space.','Belize is the only Central American country where English is the official language.']},
+'124':{n:'Canada',a2:'ca',c:'northAmerica',sr:'Northern America',cap:'Ottawa',lang:['English','French'],pop:'40M',cur:'Canadian Dollar (CAD)',facts:['Canada is the second largest country in the world by total area.','It has more lakes than all other countries combined, with over 2 million lakes.','Canada produces about 71% of the world\'s maple syrup.']},
+'188':{n:'Costa Rica',a2:'cr',c:'northAmerica',sr:'Central America',cap:'San Jose',lang:['Spanish'],pop:'5.2M',cur:'Costa Rican Colon (CRC)',facts:['Costa Rica has no army and has been without a military since 1948.','About 25% of the country is protected national parks and reserves.','Costa Rica has over 500,000 species of wildlife, making it one of the most biodiverse places on Earth.']},
+'192':{n:'Cuba',a2:'cu',c:'northAmerica',sr:'Caribbean',cap:'Havana',lang:['Spanish'],pop:'11M',cur:'Cuban Peso (CUP)',facts:['Cuba is the largest island in the Caribbean.','Classic American cars from the 1950s still drive on Cuban streets because of decades of trade restrictions.','Cuba has one of the highest literacy rates in the world.']},
+'214':{n:'Dominican Republic',a2:'do',c:'northAmerica',sr:'Caribbean',cap:'Santo Domingo',lang:['Spanish'],pop:'11M',cur:'Dominican Peso (DOP)',facts:['Santo Domingo is the oldest continuously inhabited European settlement in the Americas.','The Dominican Republic shares the island of Hispaniola with Haiti.','Baseball is the most popular sport and the country has produced many Major League Baseball stars.']},
+'222':{n:'El Salvador',a2:'sv',c:'northAmerica',sr:'Central America',cap:'San Salvador',lang:['Spanish'],pop:'6.3M',cur:'United States Dollar (USD)',facts:['El Salvador is the smallest and most densely populated country in Central America.','It has over 20 volcanoes and is sometimes called the "Land of Volcanoes."','Pupusas, thick stuffed corn tortillas, are the national dish.']},
+'320':{n:'Guatemala',a2:'gt',c:'northAmerica',sr:'Central America',cap:'Guatemala City',lang:['Spanish'],pop:'18M',cur:'Guatemalan Quetzal (GTQ)',facts:['Guatemala was the heartland of the ancient Maya civilization.','The quetzal, a beautiful bird with long green tail feathers, is the national bird and currency symbol.','Tikal, an ancient Maya city in the jungle, has pyramids taller than 70 meters.']},
+'332':{n:'Haiti',a2:'ht',c:'northAmerica',sr:'Caribbean',cap:'Port-au-Prince',lang:['French','Haitian Creole'],pop:'12M',cur:'Haitian Gourde (HTG)',facts:['Haiti was the first free Black republic in the world, gaining independence in 1804.','It was the first Caribbean country to gain independence.','The Citadelle Laferriere is the largest fortress in the Americas.']},
+'340':{n:'Honduras',a2:'hn',c:'northAmerica',sr:'Central America',cap:'Tegucigalpa',lang:['Spanish'],pop:'10M',cur:'Honduran Lempira (HNL)',facts:['Honduras has the second largest coral reef in the world, the Mesoamerican Barrier Reef.','The ancient Maya ruins of Copan are a UNESCO World Heritage Site.','Honduras is home to the rare and beautiful scarlet macaw.']},
+'388':{n:'Jamaica',a2:'jm',c:'northAmerica',sr:'Caribbean',cap:'Kingston',lang:['English'],pop:'3M',cur:'Jamaican Dollar (JMD)',facts:['Jamaica is the birthplace of reggae music and the legendary Bob Marley.','Jamaican sprinters like Usain Bolt have made the country famous for speed.','Blue Mountain Coffee from Jamaica is considered some of the best in the world.']},
+'484':{n:'Mexico',a2:'mx',c:'northAmerica',sr:'Northern America',cap:'Mexico City',lang:['Spanish'],pop:'130M',cur:'Mexican Peso (MXN)',facts:['Mexico City is built on the ruins of the ancient Aztec capital, Tenochtitlan.','Mexico introduced chocolate, corn, and chili peppers to the world.','Mexico has 35 UNESCO World Heritage Sites, more than any other country in the Americas.']},
+'558':{n:'Nicaragua',a2:'ni',c:'northAmerica',sr:'Central America',cap:'Managua',lang:['Spanish'],pop:'7M',cur:'Nicaraguan Cordoba (NIO)',facts:['Nicaragua is the largest country in Central America.','Lake Nicaragua is the largest lake in Central America and has freshwater sharks.','Nicaragua has many active volcanoes, and some people sand-board down them.']},
+'591':{n:'Panama',a2:'pa',c:'northAmerica',sr:'Central America',cap:'Panama City',lang:['Spanish'],pop:'4.4M',cur:'Panamanian Balboa (PAB)',facts:['The Panama Canal connects the Atlantic and Pacific Oceans and is one of the greatest engineering feats in history.','Panama is the only place in the world where you can see the sun rise on the Pacific and set on the Atlantic.','Panama hats actually originated in Ecuador, not Panama.']},
+'780':{n:'Trinidad and Tobago',a2:'tt',c:'northAmerica',sr:'Caribbean',cap:'Port of Spain',lang:['English'],pop:'1.4M',cur:'Trinidad and Tobago Dollar (TTD)',facts:['Trinidad and Tobago has one of the biggest Carnival celebrations in the world.','Steel pan drums (steel drums) were invented in Trinidad.','The Pitch Lake in Trinidad is the largest natural deposit of asphalt in the world.']},
+'840':{n:'United States',a2:'us',c:'northAmerica',sr:'Northern America',cap:'Washington, D.C.',lang:['English'],pop:'335M',cur:'United States Dollar (USD)',facts:['The United States has 50 states and is the third largest country in the world by area.','Americans invented the airplane, the lightbulb, the internet, and basketball.','The Grand Canyon is over 1.8 billion years old and 446 km long.']},
+'304':{n:'Greenland',a2:'gl',c:'northAmerica',sr:'Northern America',cap:'Nuuk',lang:['Greenlandic','Danish'],pop:'57K',cur:'Danish Krone (DKK)',facts:['Greenland is the largest island in the world, but despite its name, about 80% is covered by a massive ice sheet.','Greenland is a territory of Denmark but has its own government and flag.','The Northern Lights are visible from Greenland for much of the winter, and in summer the sun never sets.']},
+'28':{n:'Antigua and Barbuda',a2:'ag',c:'northAmerica',sr:'Caribbean',cap:"Saint John's",lang:['English'],pop:'100K',cur:'East Caribbean Dollar (XCD)',facts:['Antigua and Barbuda has 365 beaches, one for every day of the year.','Antigua hosted one of the first cricket matches in the Caribbean.','The islands were originally inhabited by the Arawak and Carib peoples.']},
+'52':{n:'Barbados',a2:'bb',c:'northAmerica',sr:'Caribbean',cap:'Bridgetown',lang:['English'],pop:'280K',cur:'Barbadian Dollar (BBD)',facts:['Barbados is the birthplace of the singer Rihanna.','It became a republic in 2021 after being a constitutional monarchy for centuries.','Barbados has one of the oldest parliaments in the Americas, established in 1639.']},
+'212':{n:'Dominica',a2:'dm',c:'northAmerica',sr:'Caribbean',cap:'Roseau',lang:['English'],pop:'72K',cur:'East Caribbean Dollar (XCD)',facts:['Dominica is known as the "Nature Isle of the Caribbean" for its lush tropical forests.','It has the Boiling Lake, the second largest hot spring in the world.','Dominica is one of the few places where the Kalinago (Carib) indigenous people still live.']},
+'308':{n:'Grenada',a2:'gd',c:'northAmerica',sr:'Caribbean',cap:"Saint George's",lang:['English'],pop:'125K',cur:'East Caribbean Dollar (XCD)',facts:['Grenada is known as the "Spice Isle" because it produces nutmeg, cinnamon, and cloves.','It is one of the world\'s largest exporters of nutmeg.','Grenada has a famous underwater sculpture park.']},
+'659':{n:'Saint Kitts and Nevis',a2:'kn',c:'northAmerica',sr:'Caribbean',cap:'Basseterre',lang:['English'],pop:'55K',cur:'East Caribbean Dollar (XCD)',facts:['Saint Kitts and Nevis is the smallest country in the Americas by both area and population.','Brimstone Hill Fortress is a UNESCO World Heritage Site.','The country has a scenic railway that circles the island of Saint Kitts.']},
+'662':{n:'Saint Lucia',a2:'lc',c:'northAmerica',sr:'Caribbean',cap:'Castries',lang:['English'],pop:'180K',cur:'East Caribbean Dollar (XCD)',facts:['The Pitons, two dramatic volcanic spires, are Saint Lucia\'s most iconic landmark.','Saint Lucia is the only country named after a woman (Saint Lucy).','The island has drive-in volcanic hot springs you can visit.']},
+'670':{n:'Saint Vincent and the Grenadines',a2:'vc',c:'northAmerica',sr:'Caribbean',cap:'Kingstown',lang:['English'],pop:'110K',cur:'East Caribbean Dollar (XCD)',facts:['Pirates of the Caribbean movies were filmed on several of the Grenadine islands.','The country is made up of 32 islands and cays.','Saint Vincent has a beautiful active volcano called La Soufriere.']},
+
+// ── SOUTH AMERICA ───────────────────────────────────
+'32':{n:'Argentina',a2:'ar',c:'southAmerica',sr:'Southern South America',cap:'Buenos Aires',lang:['Spanish'],pop:'46M',cur:'Argentine Peso (ARS)',facts:['Argentina is the birthplace of tango, a passionate dance and music style.','Aconcagua in Argentina is the tallest mountain outside of Asia at 6,961 meters.','Argentina is famous for beef, and the traditional asado (barbecue) is a national tradition.']},
+'68':{n:'Bolivia',a2:'bo',c:'southAmerica',sr:'Andean',cap:'Sucre',lang:['Spanish','Quechua','Aymara'],pop:'12M',cur:'Bolivian Boliviano (BOB)',facts:['Bolivia has the largest salt flat in the world, Salar de Uyuni, which looks like a giant mirror when it rains.','La Paz is the highest capital city in the world at over 3,600 meters above sea level.','Bolivia is one of the most linguistically diverse countries in South America with 37 official languages.']},
+'76':{n:'Brazil',a2:'br',c:'southAmerica',sr:'Brazilian',cap:'Brasilia',lang:['Portuguese'],pop:'216M',cur:'Brazilian Real (BRL)',facts:['Brazil is the largest country in South America and the fifth largest in the world.','The Amazon Rainforest produces about 20% of the world\'s oxygen.','Brazil has won the FIFA World Cup more times than any other country, with 5 titles.']},
+'152':{n:'Chile',a2:'cl',c:'southAmerica',sr:'Andean',cap:'Santiago',lang:['Spanish'],pop:'19.5M',cur:'Chilean Peso (CLP)',facts:['Chile is the longest country in the world from north to south, stretching over 4,300 km.','The Atacama Desert in Chile is the driest place on Earth.','Easter Island (Rapa Nui), famous for its mysterious Moai statues, belongs to Chile.']},
+'170':{n:'Colombia',a2:'co',c:'southAmerica',sr:'Northern South America',cap:'Bogota',lang:['Spanish'],pop:'52M',cur:'Colombian Peso (COP)',facts:['Colombia is the only South American country with coastlines on both the Pacific Ocean and the Caribbean Sea.','It is one of the most biodiverse countries on Earth with more bird species than any other country.','Colombia produces some of the finest coffee in the world.']},
+'218':{n:'Ecuador',a2:'ec',c:'southAmerica',sr:'Andean',cap:'Quito',lang:['Spanish'],pop:'18M',cur:'United States Dollar (USD)',facts:['Ecuador is named after the Equator, which passes right through the country.','The Galapagos Islands, where Charles Darwin developed his theory of evolution, belong to Ecuador.','Ecuador has incredible biodiversity despite being one of the smallest countries in South America.']},
+'328':{n:'Guyana',a2:'gy',c:'southAmerica',sr:'Northern South America',cap:'Georgetown',lang:['English'],pop:'810K',cur:'Guyanese Dollar (GYD)',facts:['Guyana is the only English-speaking country in South America.','Kaieteur Falls is one of the most powerful waterfalls in the world.','About 80% of the country is covered by tropical rainforest.']},
+'600':{n:'Paraguay',a2:'py',c:'southAmerica',sr:'Southern South America',cap:'Asuncion',lang:['Spanish','Guarani'],pop:'7.4M',cur:'Paraguayan Guarani (PYG)',facts:['Paraguay is one of only a few countries in the Americas where an indigenous language (Guarani) is widely spoken alongside the colonial language.','The Itaipu Dam on the border with Brazil is one of the largest hydroelectric power plants in the world.','Paraguay is sometimes called the "Heart of South America" because of its central location.']},
+'604':{n:'Peru',a2:'pe',c:'southAmerica',sr:'Andean',cap:'Lima',lang:['Spanish','Quechua'],pop:'34M',cur:'Peruvian Sol (PEN)',facts:['Machu Picchu, the lost city of the Incas, is one of the New Seven Wonders of the World.','Peru has a section of the Amazon Rainforest and the Andes Mountains.','Peru has over 3,000 varieties of potatoes, more than any other country.']},
+'740':{n:'Suriname',a2:'sr',c:'southAmerica',sr:'Northern South America',cap:'Paramaribo',lang:['Dutch'],pop:'620K',cur:'Surinamese Dollar (SRD)',facts:['Suriname is the smallest country in South America.','About 93% of the country is covered by tropical rainforest.','Suriname is the only country in South America where Dutch is the official language.']},
+'858':{n:'Uruguay',a2:'uy',c:'southAmerica',sr:'Southern South America',cap:'Montevideo',lang:['Spanish'],pop:'3.4M',cur:'Uruguayan Peso (UYU)',facts:['Uruguay hosted and won the first ever FIFA World Cup in 1930.','Uruguay was one of the first countries in the world to provide free laptops to every student.','Uruguay generates nearly all of its electricity from renewable sources.']},
+'862':{n:'Venezuela',a2:'ve',c:'southAmerica',sr:'Northern South America',cap:'Caracas',lang:['Spanish'],pop:'28M',cur:'Venezuelan Bolivar (VES)',facts:['Angel Falls in Venezuela is the highest waterfall in the world at 979 meters.','Venezuela\'s name means "Little Venice" because early explorers saw stilt houses over water.','Lake Maracaibo has the most lightning strikes of any place on Earth.']},
+
+// ── OCEANIA ─────────────────────────────────────────
+'36':{n:'Australia',a2:'au',c:'oceania',sr:'Australia and New Zealand',cap:'Canberra',lang:['English'],pop:'26M',cur:'Australian Dollar (AUD)',facts:['Australia is both a country and a continent, and it is the sixth largest country in the world.','The Great Barrier Reef is the largest living structure on Earth, visible from space.','Australia has more than 140 species of marsupials, including kangaroos, koalas, and wombats.']},
+'242':{n:'Fiji',a2:'fj',c:'oceania',sr:'Melanesia',cap:'Suva',lang:['English','Fijian','Hindi'],pop:'930K',cur:'Fijian Dollar (FJD)',facts:['Fiji is made up of over 330 islands, but only about 110 are permanently inhabited.','Fiji is home to some of the world\'s best coral reefs for snorkeling and diving.','Rugby sevens is hugely popular, and Fiji won Olympic gold in the sport.']},
+'554':{n:'New Zealand',a2:'nz',c:'oceania',sr:'Australia and New Zealand',cap:'Wellington',lang:['English','Maori'],pop:'5.2M',cur:'New Zealand Dollar (NZD)',facts:['New Zealand was the first country in the world to give women the right to vote in 1893.','It was used as the filming location for The Lord of the Rings and The Hobbit movies.','The kiwi bird, which cannot fly, is the national symbol of New Zealand.']},
+'598':{n:'Papua New Guinea',a2:'pg',c:'oceania',sr:'Melanesia',cap:'Port Moresby',lang:['English','Tok Pisin','Hiri Motu'],pop:'10M',cur:'Papua New Guinean Kina (PGK)',facts:['Papua New Guinea has over 840 languages, more than any other country in the world.','Much of the country is covered by dense tropical rainforest and has rarely been explored.','The island of New Guinea is the second largest island in the world.']},
+'90':{n:'Solomon Islands',a2:'sb',c:'oceania',sr:'Melanesia',cap:'Honiara',lang:['English'],pop:'720K',cur:'Solomon Islands Dollar (SBD)',facts:['The Solomon Islands have some of the most beautiful and untouched coral reefs in the world.','The islands were an important battleground during World War II.','Over 70 languages are spoken across the Solomon Islands.']},
+'548':{n:'Vanuatu',a2:'vu',c:'oceania',sr:'Melanesia',cap:'Port Vila',lang:['Bislama','English','French'],pop:'330K',cur:'Vanuatu Vatu (VUV)',facts:['Vanuatu is one of the most linguistically diverse countries per person on Earth.','The island of Tanna has an active volcano called Mount Yasur that you can walk up to the rim of.','Bungee jumping originated from a traditional Vanuatu practice called land diving.']},
+'296':{n:'Kiribati',a2:'ki',c:'oceania',sr:'Micronesia',cap:'Tarawa',lang:['English','Gilbertese'],pop:'130K',cur:'Australian Dollar (AUD)',facts:['Kiribati is the first country in the world to see the sunrise each day.','It is one of the most remote countries on Earth, spread across 3.5 million sq km of ocean.','Kiribati is one of the countries most threatened by rising sea levels.']},
+'584':{n:'Marshall Islands',a2:'mh',c:'oceania',sr:'Micronesia',cap:'Majuro',lang:['Marshallese','English'],pop:'42K',cur:'United States Dollar (USD)',facts:['The Marshall Islands are made up of 29 coral atolls with over 1,100 individual islands.','Marshallese people are expert navigators who used stick charts to map ocean currents.','Bikini Atoll in the Marshall Islands was the site of nuclear tests and gave its name to the bikini swimsuit.']},
+'583':{n:'Micronesia',a2:'fm',c:'oceania',sr:'Micronesia',cap:'Palikir',lang:['English'],pop:'115K',cur:'United States Dollar (USD)',facts:['The Federated States of Micronesia includes over 600 islands spread across the western Pacific.','Nan Madol, an ancient city built on artificial islands, is sometimes called the "Venice of the Pacific."','Each of Micronesia\'s four states has its own unique culture and language.']},
+'520':{n:'Nauru',a2:'nr',c:'oceania',sr:'Micronesia',cap:'Yaren',lang:['Nauruan','English'],pop:'13K',cur:'Australian Dollar (AUD)',facts:['Nauru is the smallest island nation in the world and the third smallest country overall.','The entire country has a circumference of only about 19 km.','Nauru was once one of the richest countries per person due to phosphate mining.']},
+'585':{n:'Palau',a2:'pw',c:'oceania',sr:'Micronesia',cap:'Ngerulmud',lang:['Palauan','English'],pop:'18K',cur:'United States Dollar (USD)',facts:['Palau has some of the most pristine coral reefs and marine life in the world.','Jellyfish Lake has millions of golden jellyfish that have lost their sting.','Palau was the first country to create a large-scale marine sanctuary.']},
+'882':{n:'Samoa',a2:'ws',c:'oceania',sr:'Polynesia',cap:'Apia',lang:['Samoan','English'],pop:'220K',cur:'Samoan Tala (WST)',facts:['Samoa was the first Polynesian country to gain independence in 1962.','Fa\'a Samoa (the Samoan Way) is a traditional way of life that emphasizes family and community.','The To Sua Ocean Trench is a stunning natural swimming hole surrounded by gardens.']},
+'776':{n:'Tonga',a2:'to',c:'oceania',sr:'Polynesia',cap:"Nuku'alofa",lang:['Tongan','English'],pop:'100K',cur:'Tongan Pa\'anga (TOP)',facts:['Tonga is the only monarchy in the Pacific and has never been colonized by a European power.','The country has over 170 islands but only 36 are inhabited.','Humpback whales visit Tonga\'s waters every year to breed and raise their calves.']},
+'798':{n:'Tuvalu',a2:'tv',c:'oceania',sr:'Polynesia',cap:'Funafuti',lang:['Tuvaluan','English'],pop:'12K',cur:'Australian Dollar (AUD)',facts:['Tuvalu is one of the smallest and most remote countries in the world.','The country earns millions from licensing its ".tv" internet domain name.','Tuvalu\'s highest point is only 4.6 meters above sea level.']},
+};
+
+// ── Helpers ─────────────────────────────────────────
+let worldData=null,curContinent=null,explored=new Set(),selectedId=null;
+let svgEl=null,gEl=null,zoomBehavior=null;
+let ttsAudio=null,ttsPlaying=false;
+
+function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');}
+function setMascot(s){const m=document.getElementById('mascot');m.className='';void m.offsetWidth;m.className=s||'mfloat';if(s&&s!=='mfloat')m.addEventListener('animationend',()=>{m.className='mfloat';},{once:true});}
+
+// Tooltip
+let ttTimer=null;
+function showTooltip(text,x,y,dur=0){
+  clearTimeout(ttTimer);
+  const tt=document.getElementById('tooltip');
+  tt.textContent=text;tt.style.display='block';
+  tt.style.left=Math.min(x+14,innerWidth-150)+'px';tt.style.top=(y-32)+'px';
+  if(dur)ttTimer=setTimeout(()=>tt.style.display='none',dur);
+}
+function hideTooltip(){clearTimeout(ttTimer);document.getElementById('tooltip').style.display='none';}
+
+function confetti(x,y){const c=['#ffd700','#4ade80','#60a5fa','#f472b6','#fb923c'];for(let i=0;i<12;i++){const a=Math.random()*Math.PI*2,d=40+Math.random()*60;const sp=document.createElement('div');sp.style.cssText=`position:fixed;width:7px;height:7px;border-radius:50%;background:${c[i%5]};left:${x}px;top:${y}px;pointer-events:none;--dx:${Math.cos(a)*d}px;--dy:${Math.sin(a)*d}px;animation:cpop .6s forwards;z-index:60`;document.getElementById('particles').appendChild(sp);setTimeout(()=>sp.remove(),700);}}
+
+function ttsPlay(a2){
+  ttsStop();
+  const src='audio/countries/'+a2+'.mp3';
+  ttsAudio=new Audio(src);
+  ttsAudio.onplay=()=>{ttsPlaying=true;updateTtsBtn();};
+  ttsAudio.onended=()=>{ttsPlaying=false;updateTtsBtn();};
+  ttsAudio.onerror=()=>{ttsPlaying=false;ttsAudio=null;updateTtsBtn();};
+  ttsAudio.play().catch(()=>{});
+}
+function ttsStop(){
+  if(ttsAudio){ttsAudio.pause();ttsAudio.currentTime=0;ttsAudio=null;}
+  ttsPlaying=false;updateTtsBtn();
+}
+function ttsToggle(a2){ttsPlaying?ttsStop():ttsPlay(a2);}
+function updateTtsBtn(){
+  const btn=document.getElementById('tts-btn');
+  if(btn)btn.textContent=ttsPlaying?'\u23f9 Stop':'\u{1f50a} Listen';
+}
+
+function getCountryColor(info){
+  return SUBREGION_COLORS[info.sr]||'#0e2e58';
+}
+
+function countForContinent(ckey){
+  if(ckey==='world')return Object.keys(CD).length;
+  return Object.values(CD).filter(c=>c.c===ckey).length;
+}
+
+function exploredForContinent(ckey){
+  if(ckey==='world')return explored.size;
+  return [...explored].filter(id=>CD[id]&&CD[id].c===ckey).length;
+}
+
+// ── Build continent picker ──────────────────────────
+(()=>{
+  const grid=document.getElementById('continent-grid');
+  for(const [key,cfg] of Object.entries(CONTINENTS)){
+    const ct=countForContinent(key);
+    const btn=document.createElement('button');
+    btn.className='continent-btn'+(key==='world'?' world-btn':'');
+    btn.innerHTML=`<span class="emoji">${cfg.emoji}</span><span class="cname">${cfg.name}</span><span class="ccount">${ct} countries</span>`;
+    btn.onclick=()=>openContinent(key);
+    grid.appendChild(btn);
+  }
+})();
+
+// ── Map loading & rendering ─────────────────────────
+async function loadWorld(){
+  if(worldData)return true;
+  document.getElementById('map-wrap').innerHTML='<p style="opacity:.5;text-align:center;padding-top:30vh">Loading world map\u2026</p>';
+  try{
+    worldData=await d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json');
+    return true;
+  }catch(e){
+    document.getElementById('map-wrap').innerHTML='<p style="color:#ff8888;text-align:center;padding-top:30vh">Could not load map. Please check your internet connection.</p>';
+    return false;
+  }
+}
+
+async function openContinent(key){
+  initAC();sndNav();
+  curContinent=key;
+  showScreen('explore');
+  document.getElementById('hud').classList.add('active');
+  document.getElementById('zoom-controls').classList.add('active');
+  document.getElementById('mascot').style.display='block';
+  setMascot('mfloat');
+
+  const cfg=CONTINENTS[key];
+  document.getElementById('hud-continent').textContent=cfg.emoji+' '+cfg.name;
+  updateExploredHud();
+
+  const ok=await loadWorld();
+  if(!ok)return;
+  renderContinent(key);
+}
+
+function renderContinent(key){
+  const wrap=document.getElementById('map-wrap');
+  wrap.innerHTML='';
+  closeInfo();
+
+  const cfg=CONTINENTS[key];
+  const w=960,h=600;
+  svgEl=d3.select(wrap).append('svg')
+    .attr('viewBox',`0 0 ${w} ${h}`)
+    .attr('preserveAspectRatio','xMidYMid meet');
+
+  const proj=cfg.proj==='natural'
+    ?d3.geoNaturalEarth1().scale(cfg.scale).translate([w/2,h/2])
+    :d3.geoMercator().center(cfg.center).scale(cfg.scale).translate([w/2,h/2]);
+  const path=d3.geoPath().projection(proj);
+
+  const allFeatures=topojson.feature(worldData,worldData.objects.countries).features;
+  const isWorld=key==='world';
+  const features=allFeatures.filter(d=>{
+    const info=CD[String(Number(d.id))];
+    return info&&(isWorld||info.c===key);
+  });
+
+  gEl=svgEl.append('g');
+
+  // Country fills
+  gEl.selectAll('path.country-path')
+    .data(features)
+    .join('path')
+    .attr('class',d=>{
+      const nid=String(Number(d.id));
+      let cls='country-path';
+      if(explored.has(nid))cls+=' explored';
+      if(nid===selectedId)cls+=' selected';
+      return cls;
+    })
+    .attr('id',d=>'c-'+d.id)
+    .attr('d',path)
+    .attr('fill',d=>{
+      const info=CD[String(Number(d.id))];
+      return info?getCountryColor(info):'#1a2a5a';
+    })
+    .on('mousemove',(e,d)=>{
+      const info=CD[String(Number(d.id))];
+      if(!info)return;
+      showTooltip(info.n,e.clientX,e.clientY);
+    })
+    .on('mouseleave',()=>hideTooltip())
+    .on('click',(e,d)=>{
+      const nid=String(Number(d.id));
+      const info=CD[nid];
+      if(info)selectCountry(nid,info,e.clientX,e.clientY);
+    });
+
+  // Borders (only between countries in this continent)
+  const cSet=new Set(features.map(f=>f.id));
+  const allMesh=topojson.mesh(worldData,worldData.objects.countries,(a,b)=>a!==b&&(cSet.has(a.id)||cSet.has(b.id)));
+  gEl.append('path')
+    .datum(allMesh)
+    .attr('fill','none')
+    .attr('stroke','rgba(100,140,200,.3)')
+    .attr('stroke-width','0.5')
+    .attr('d',path)
+    .attr('pointer-events','none');
+
+  // Zoom
+  zoomBehavior=d3.zoom()
+    .scaleExtent([1,10])
+    .on('zoom',e=>gEl.attr('transform',e.transform));
+  svgEl.call(zoomBehavior);
+}
+
+function zoomIn(){if(svgEl&&zoomBehavior)svgEl.transition().duration(300).call(zoomBehavior.scaleBy,1.5);}
+function zoomOut(){if(svgEl&&zoomBehavior)svgEl.transition().duration(300).call(zoomBehavior.scaleBy,0.67);}
+function zoomReset(){if(svgEl&&zoomBehavior)svgEl.transition().duration(300).call(zoomBehavior.transform,d3.zoomIdentity);}
+
+// ── Country selection & info panel ──────────────────
+function selectCountry(nid,info,cx,cy){
+  initAC();
+  const isNew=!explored.has(nid);
+  explored.add(nid);
+  selectedId=nid;
+
+  // Update map styling
+  d3.selectAll('.country-path').classed('selected',false).classed('explored',function(){
+    const fid=String(Number(d3.select(this).datum().id));
+    return explored.has(fid);
+  });
+  const el=svgEl.select('#c-'+nid.padStart(3,'0'));
+  if(!el.empty())el.classed('selected',true);
+  // Also try without padding
+  const el2=svgEl.select('#c-'+nid);
+  if(!el2.empty())el2.classed('selected',true);
+
+  if(isNew){sndDiscover();setMascot('mhappy');confetti(cx,cy);}
+  else{sndOpen();}
+
+  updateExploredHud();
+  showInfo(nid,info);
+}
+
+function showInfo(nid,info){
+  const panel=document.getElementById('info-panel');
+  const flagUrl='https://flagcdn.com/w80/'+info.a2+'.png';
+  const flagUrl2x='https://flagcdn.com/w160/'+info.a2+'.png';
+
+  // Build sorted list for prev/next nav
+  const continentIds=Object.entries(CD).filter(([,v])=>v.c===info.c).sort((a,b)=>a[1].n.localeCompare(b[1].n));
+  const idx=continentIds.findIndex(([k])=>k===nid);
+  const prev=idx>0?continentIds[idx-1]:null;
+  const next=idx<continentIds.length-1?continentIds[idx+1]:null;
+
+  document.getElementById('info-content').innerHTML=`
+    <div class="info-header">
+      <img class="info-flag" src="${flagUrl}" srcset="${flagUrl2x} 2x" alt="Flag of ${info.n}" onerror="this.style.display='none'">
+      <div><h2>${info.n}</h2>
+      <button id="tts-btn" class="btn btn-ghost" onclick="ttsToggle('${info.a2}')" style="margin-top:6px;font-size:.78em;padding:5px 12px">\u{1f50a} Listen</button></div>
+    </div>
+    <div class="info-row"><span class="info-label">Capital</span><span class="info-value">${info.cap}</span></div>
+    <div class="info-row"><span class="info-label">Languages</span><span class="info-value">${info.lang.join(', ')}</span></div>
+    <div class="info-row"><span class="info-label">Population</span><span class="info-value">${info.pop}</span></div>
+    <div class="info-row"><span class="info-label">Currency</span><span class="info-value">${info.cur}</span></div>
+    <div class="facts-title">Fun Facts</div>
+    ${info.facts.map(f=>`<div class="fact-item">${f}</div>`).join('')}
+    <div class="info-nav">
+      ${prev?`<button class="btn btn-ghost" onclick="navCountry('${prev[0]}')">\u2190 ${prev[1].n}</button>`:''}
+      ${next?`<button class="btn btn-ghost" onclick="navCountry('${next[0]}')">${next[1].n} \u2192</button>`:''}
+    </div>
+  `;
+  panel.classList.add('open');
+}
+
+function navCountry(nid){
+  const info=CD[nid];
+  if(!info)return;
+  ttsStop();
+  explored.add(nid);
+  selectedId=nid;
+  sndOpen();
+
+  d3.selectAll('.country-path').classed('selected',false).classed('explored',function(){
+    const fid=String(Number(d3.select(this).datum().id));
+    return explored.has(fid);
+  });
+  const el=svgEl.select('#c-'+nid.padStart(3,'0'));
+  if(!el.empty())el.classed('selected',true);
+  const el2=svgEl.select('#c-'+nid);
+  if(!el2.empty())el2.classed('selected',true);
+
+  updateExploredHud();
+  showInfo(nid,info);
+  document.getElementById('info-panel').scrollTop=0;
+}
+
+function closeInfo(){
+  ttsStop();
+  document.getElementById('info-panel').classList.remove('open');
+  selectedId=null;
+  d3.selectAll('.country-path').classed('selected',false);
+}
+
+function updateExploredHud(){
+  if(!curContinent)return;
+  const total=countForContinent(curContinent);
+  const exp=exploredForContinent(curContinent);
+  document.getElementById('hud-explored').textContent=`Explored ${exp} / ${total}`;
+}
+
+function goHome(){
+  showScreen('home');
+  document.getElementById('hud').classList.remove('active');
+  document.getElementById('zoom-controls').classList.remove('active');
+  document.getElementById('mascot').style.display='none';
+  closeInfo();
+  curContinent=null;selectedId=null;
+}
+</script>
+</body>
+</html>

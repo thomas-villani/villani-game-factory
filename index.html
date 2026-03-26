@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Villani Game Factory</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem 1rem;
+  }
+
+  h1 {
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    text-align: center;
+    margin-bottom: 0.25rem;
+    background: linear-gradient(90deg, #f9d423, #ff4e50, #f9d423);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 3s linear infinite;
+  }
+
+  @keyframes shimmer {
+    to { background-position: 200% center; }
+  }
+
+  .subtitle {
+    font-size: clamp(0.9rem, 2vw, 1.2rem);
+    color: #b8b8d0;
+    margin-bottom: 2.5rem;
+    text-align: center;
+  }
+
+  .games {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 1.5rem;
+    max-width: 900px;
+    width: 100%;
+  }
+
+  .game-card {
+    background: rgba(255, 255, 255, 0.07);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 1rem;
+    padding: 1.75rem 1.5rem;
+    text-decoration: none;
+    color: #fff;
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .game-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+
+  .game-card .emoji {
+    font-size: 2.5rem;
+    line-height: 1;
+  }
+
+  .game-card .name {
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+
+  .game-card .desc {
+    font-size: 0.85rem;
+    color: #b8b8d0;
+    line-height: 1.4;
+  }
+</style>
+</head>
+<body>
+
+<h1>Villani Game Factory</h1>
+<p class="subtitle">Pick a game and play!</p>
+
+<div class="games">
+  <a class="game-card" href="space-word-catcher.html">
+    <span class="emoji">🚀</span>
+    <span class="name">Space Word Catcher</span>
+    <span class="desc">Catch falling words with your spaceship to build your vocabulary.</span>
+  </a>
+
+  <a class="game-card" href="number-blaster.html">
+    <span class="emoji">🔢</span>
+    <span class="name">Number Blaster</span>
+    <span class="desc">Blast the right answers to math problems before time runs out.</span>
+  </a>
+
+  <a class="game-card" href="color-mixer-lab.html">
+    <span class="emoji">🧪</span>
+    <span class="name">Color Mixer Lab</span>
+    <span class="desc">Mix colors together in the lab and discover what you can create.</span>
+  </a>
+
+  <a class="game-card" href="map-tap.html">
+    <span class="emoji">🗺️</span>
+    <span class="name">Map Tap</span>
+    <span class="desc">Tap the right spot on the map to learn about places around the world.</span>
+  </a>
+
+  <a class="game-card" href="letter-by-letter.html">
+    <span class="emoji">🔡</span>
+    <span class="name">Letter by Letter</span>
+    <span class="desc">Build words one letter at a time to practice spelling.</span>
+  </a>
+
+  <a class="game-card" href="music-studio.html">
+    <span class="emoji">🎵</span>
+    <span class="name">Music Studio</span>
+    <span class="desc">Create your own tunes by mixing instruments and beats.</span>
+  </a>
+
+  <a class="game-card" href="robo-escape.html">
+    <span class="emoji">🤖</span>
+    <span class="name">Robo Escape</span>
+    <span class="desc">Help the robot escape by solving puzzles and challenges.</span>
+  </a>
+
+  <a class="game-card" href="world-explorer.html">
+    <span class="emoji">🌍</span>
+    <span class="name">World Explorer</span>
+    <span class="desc">Travel the globe and learn about countries, flags, and cultures.</span>
+  </a>
+</div>
+
+</body>
+</html>

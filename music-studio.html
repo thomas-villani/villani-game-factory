@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>🎵 Music Studio</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#08080f;color:#fff;font-family:'Comic Sans MS','Chalkboard SE',cursive;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+canvas#stars{position:fixed;inset:0;pointer-events:none;z-index:0}
+#app{position:relative;z-index:1;display:flex;flex-direction:column;height:100%;padding:8px 10px 6px;gap:6px;max-width:860px;margin:0 auto;width:100%}
+
+/* Header */
+#hdr{display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+#hdr h1{font-size:clamp(1.1em,4vw,1.6em);background:linear-gradient(90deg,#ffd700,#f472b6,#60a5fa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+#hdr-right{display:flex;gap:8px;align-items:center}
+.icon-btn{background:none;border:none;color:#fff;font-size:1.3em;cursor:pointer;padding:3px 6px;border-radius:8px;transition:transform .1s}
+.icon-btn:active{transform:scale(.9)}
+
+/* Transport */
+#transport{display:flex;align-items:center;gap:10px;flex-shrink:0;background:rgba(255,255,255,.05);border-radius:14px;padding:7px 12px;border:1px solid rgba(255,255,255,.08)}
+#play-btn{padding:8px 22px;border-radius:12px;border:none;cursor:pointer;font-family:inherit;font-size:1em;font-weight:700;background:#22c55e;color:#001a00;transition:all .15s;flex-shrink:0}
+#play-btn.playing{background:#ef4444;color:#fff}
+#play-btn:active{transform:scale(.95)}
+#bpm-wrap{display:flex;align-items:center;gap:6px;flex:1;font-size:.82em;opacity:.85}
+#bpm-wrap input{flex:1;accent-color:#ffd700;cursor:pointer}
+#bpm-val{min-width:28px;font-weight:700;color:#ffd700}
+
+/* Visualizer */
+#viz{width:100%;height:44px;border-radius:10px;background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.07);flex-shrink:0;display:block}
+
+/* Studio tracks */
+#studio{display:flex;flex-direction:column;gap:6px;flex:1;min-height:0;overflow-y:auto}
+.track{background:rgba(255,255,255,.04);border-radius:14px;border:1px solid rgba(255,255,255,.07);padding:7px 10px 9px;flex-shrink:0}
+.track-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
+.track-title{font-size:.85em;font-weight:700;letter-spacing:.5px;padding:2px 8px;border-radius:8px;display:inline-flex;align-items:center;gap:5px}
+.mute-btn{background:none;border:1px solid rgba(255,255,255,.2);color:#fff;font-size:.9em;cursor:pointer;border-radius:8px;padding:2px 8px;font-family:inherit;transition:all .15s}
+.mute-btn.muted{opacity:.35;text-decoration:line-through}
+.cards{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.cards::-webkit-scrollbar{height:3px}
+.cards::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:2px}
+.card{flex:0 0 78px;height:68px;border-radius:11px;background:rgba(255,255,255,.07);border:2px solid transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;transition:all .15s;-webkit-tap-highlight-color:transparent}
+.card:active{transform:scale(.94)}
+.card .ce{font-size:1.5em;line-height:1.1}
+.card .cn{font-size:.62em;font-weight:700;opacity:.8;text-align:center;line-height:1.1}
+.card.sel{transform:translateY(-2px)}
+
+/* Step indicator */
+#step-wrap{flex-shrink:0;padding:4px 2px 2px}
+#steps{display:flex;gap:clamp(2px,1vw,5px);justify-content:center}
+.step{flex:1;max-width:36px;height:18px;border-radius:4px;background:rgba(255,255,255,.08);transition:background .05s,transform .05s}
+.step.active{transform:scaleY(1.3);transform-origin:center}
+.step.beat-on{background:rgba(249,115,22,.35)}
+</style>
+</head>
+<body>
+<canvas id="stars"></canvas>
+<div id="app">
+
+  <div id="hdr">
+    <h1>🎵 Music Studio</h1>
+    <div id="hdr-right">
+      <button class="icon-btn" id="master-mute-btn" onclick="toggleMasterMute()" title="Master mute">🔊</button>
+    </div>
+  </div>
+
+  <div id="transport">
+    <button id="play-btn" onclick="togglePlay()">▶ Play</button>
+    <div id="bpm-wrap">
+      <span>BPM</span>
+      <input type="range" id="bpm-slider" min="60" max="180" value="110" oninput="setBpm(+this.value)">
+      <span id="bpm-val">110</span>
+    </div>
+  </div>
+
+  <canvas id="viz"></canvas>
+
+  <div id="studio">
+    <div class="track">
+      <div class="track-hdr">
+        <span class="track-title" style="background:rgba(249,115,22,.2);color:#fb923c">🥁 BEAT</span>
+        <button class="mute-btn" id="mute-drums" onclick="toggleMute('drums')">🔊 on</button>
+      </div>
+      <div class="cards" id="beat-cards"></div>
+    </div>
+    <div class="track">
+      <div class="track-hdr">
+        <span class="track-title" style="background:rgba(59,130,246,.2);color:#60a5fa">🎸 BASS</span>
+        <button class="mute-btn" id="mute-bass" onclick="toggleMute('bass')">🔊 on</button>
+      </div>
+      <div class="cards" id="bass-cards"></div>
+    </div>
+    <div class="track">
+      <div class="track-hdr">
+        <span class="track-title" style="background:rgba(34,197,94,.2);color:#4ade80">🎹 MELODY</span>
+        <button class="mute-btn" id="mute-melody" onclick="toggleMute('melody')">🔊 on</button>
+      </div>
+      <div class="cards" id="melody-cards"></div>
+    </div>
+  </div>
+
+  <div id="step-wrap"><div id="steps"></div></div>
+</div>
+
+<script>
+// ── Starfield ─────────────────────────────────────────
+(()=>{const c=document.getElementById('stars');c.width=innerWidth;c.height=innerHeight;const x=c.getContext('2d');for(let i=0;i<180;i++){x.fillStyle=`rgba(255,255,255,${.1+Math.random()*.6})`;x.beginPath();x.arc(Math.random()*c.width,Math.random()*c.height,Math.random()*1.4,0,Math.PI*2);x.fill();}})();
+
+// ── Note frequencies ──────────────────────────────────
+const N={
+  C2:65.41,D2:73.42,E2:82.41,F2:87.31,G2:98.00,A2:110.00,B2:123.47,
+  C3:130.81,D3:146.83,E3:164.81,F3:174.61,G3:196.00,A3:220.00,B3:246.94,
+  C4:261.63,D4:293.66,E4:329.63,F4:349.23,G4:392.00,A4:440.00,B4:493.88
+};
+const R=0;
+
+// ── Patterns ──────────────────────────────────────────
+const BEATS=[
+  {name:'Bouncy', e:'🏀', col:'#fb923c',
+   kick: [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],
+   snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+   hat:  [1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0]},
+  {name:'Rock',   e:'🎸', col:'#f87171',
+   kick: [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
+   snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+   hat:  [1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0]},
+  {name:'Funky',  e:'🕺', col:'#c084fc',
+   kick: [1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,0],
+   snare:[0,0,0,0,1,0,0,1,0,0,0,0,1,0,0,0],
+   hat:  [1,1,0,1,1,0,1,1,0,1,1,0,1,1,0,1]},
+  {name:'Chill',  e:'😎', col:'#38bdf8',
+   kick: [1,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0],
+   snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,1,0],
+   hat:  [0,0,1,0,0,1,0,0,0,0,1,0,0,1,0,0]},
+  {name:'Silly',  e:'🤪', col:'#fbbf24',
+   kick: [1,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0],
+   snare:[0,1,0,0,1,0,0,1,0,0,1,0,1,0,0,0],
+   hat:  [1,1,1,0,0,1,1,0,1,0,1,1,0,1,0,1]},
+];
+
+const BASSLINES=[
+  {name:'Boom',    e:'💥', col:'#60a5fa',
+   notes:[N.C2,R,R,R,  N.C2,R,R,R,  N.G2,R,R,R,  N.G2,R,R,R]},
+  {name:'Funky',   e:'🎸', col:'#a78bfa',
+   notes:[N.C2,R,N.E2,R, N.G2,R,N.E2,R, N.C2,R,N.E2,R, N.G2,N.A2,R,R]},
+  {name:'Walking', e:'🚶', col:'#22d3ee',
+   notes:[N.C2,R,N.E2,R, N.G2,R,N.A2,R, N.C3,R,N.A2,R, N.G2,R,N.E2,R]},
+  {name:'Space',   e:'🚀', col:'#818cf8',
+   notes:[N.A2,R,R,N.A2, R,R,N.A2,R,   N.C3,R,R,N.C3, R,N.E3,R,R]},
+  {name:'Simple',  e:'😌', col:'#7dd3fc',
+   notes:[N.C2,R,R,R,  R,R,R,R,       N.G2,R,R,R,  R,R,R,R]},
+];
+
+const MELODIES=[
+  {name:'Happy',    e:'😊', col:'#4ade80',
+   notes:[N.C4,R,N.E4,R, N.G4,R,N.E4,R, N.C4,R,N.D4,R, N.E4,R,R,R]},
+  {name:'Space',    e:'🌌', col:'#a5b4fc',
+   notes:[N.A3,R,R,N.C4, R,N.E4,R,R,    N.G4,R,N.E4,R, N.C4,R,R,R]},
+  {name:'Dreamy',   e:'💭', col:'#f9a8d4',
+   notes:[N.E4,R,N.G4,R, N.A4,R,N.G4,R, N.E4,R,N.D4,R, N.C4,R,R,R]},
+  {name:'Silly',    e:'🤣', col:'#fde68a',
+   notes:[N.C4,N.E4,N.G4,N.E4, N.C4,R,N.G3,R, N.A3,N.C4,N.E4,R, N.G4,R,R,R]},
+  {name:'Adventure',e:'⚔️', col:'#f87171',
+   notes:[N.G3,R,N.A3,R, N.C4,R,N.E4,R, N.G4,R,N.E4,N.C4, N.A3,R,N.G3,R]},
+];
+
+// ── State ─────────────────────────────────────────────
+let AC=null, masterGain=null, analyser=null;
+let isPlaying=false, masterMuted=false;
+let muteDrums=false, muteBass=false, muteMelody=false;
+let selBeat=0, selBass=0, selMelody=0;
+let bpm=110, step=0, nextStepTime=0, schedulerTimer=null;
+const LOOKAHEAD=0.1, INTERVAL=25;
+
+function getStepDur(){return 60/(bpm*4);}
+
+// ── Audio init ─────────────────────────────────────────
+function initAC(){
+  if(AC)return;
+  AC=new(window.AudioContext||window.webkitAudioContext)();
+  masterGain=AC.createGain(); masterGain.gain.value=masterMuted?0:.82;
+  analyser=AC.createAnalyser(); analyser.fftSize=2048;
+  masterGain.connect(analyser); analyser.connect(AC.destination);
+  drawViz();
+}
+
+// ── Drum synthesis ─────────────────────────────────────
+function playKick(t){
+  const o=AC.createOscillator(),g=AC.createGain();
+  o.connect(g);g.connect(masterGain);
+  o.frequency.setValueAtTime(140,t);
+  o.frequency.exponentialRampToValueAtTime(0.01,t+0.45);
+  g.gain.setValueAtTime(1.0,t);
+  g.gain.exponentialRampToValueAtTime(0.001,t+0.45);
+  o.start(t);o.stop(t+0.45);
+}
+function playSnare(t){
+  // noise
+  const buf=AC.createBuffer(1,AC.sampleRate*.2,AC.sampleRate);
+  const d=buf.getChannelData(0); for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+  const ns=AC.createBufferSource();ns.buffer=buf;
+  const bf=AC.createBiquadFilter();bf.type='bandpass';bf.frequency.value=1200;bf.Q.value=0.8;
+  const ng=AC.createGain();ng.gain.setValueAtTime(0.7,t);ng.gain.exponentialRampToValueAtTime(0.001,t+0.18);
+  ns.connect(bf);bf.connect(ng);ng.connect(masterGain);ns.start(t);ns.stop(t+0.2);
+  // tone
+  const o=AC.createOscillator(),og=AC.createGain();
+  o.connect(og);og.connect(masterGain);o.frequency.value=220;
+  og.gain.setValueAtTime(0.4,t);og.gain.exponentialRampToValueAtTime(0.001,t+0.1);
+  o.start(t);o.stop(t+0.12);
+}
+function playHat(t){
+  const buf=AC.createBuffer(1,AC.sampleRate*.05,AC.sampleRate);
+  const d=buf.getChannelData(0); for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+  const ns=AC.createBufferSource();ns.buffer=buf;
+  const hf=AC.createBiquadFilter();hf.type='highpass';hf.frequency.value=8000;
+  const hg=AC.createGain();hg.gain.setValueAtTime(0.28,t);hg.gain.exponentialRampToValueAtTime(0.001,t+0.05);
+  ns.connect(hf);hf.connect(hg);hg.connect(masterGain);ns.start(t);ns.stop(t+0.06);
+}
+function playBass(freq,t,dur){
+  const o=AC.createOscillator(),f=AC.createBiquadFilter(),g=AC.createGain();
+  o.type='sawtooth'; o.frequency.value=freq;
+  f.type='lowpass'; f.frequency.value=700; f.Q.value=2;
+  o.connect(f);f.connect(g);g.connect(masterGain);
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.42,t+0.012);
+  g.gain.setValueAtTime(0.42,t+dur*0.7); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  o.start(t);o.stop(t+dur+0.01);
+}
+function playMelody(freq,t,dur){
+  const o=AC.createOscillator(),g=AC.createGain();
+  o.type='triangle'; o.frequency.value=freq;
+  o.connect(g);g.connect(masterGain);
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.28,t+0.015);
+  g.gain.setValueAtTime(0.28,t+dur*0.65); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  o.start(t);o.stop(t+dur+0.01);
+}
+
+// ── Scheduler ─────────────────────────────────────────
+function scheduleStep(s,t){
+  const sd=getStepDur();
+  const beat=BEATS[selBeat], bass=BASSLINES[selBass], mel=MELODIES[selMelody];
+  if(!muteDrums){
+    if(beat.kick[s])  playKick(t);
+    if(beat.snare[s]) playSnare(t);
+    if(beat.hat[s])   playHat(t);
+  }
+  if(!muteBass   && bass.notes[s]) playBass(bass.notes[s],t,sd*1.85);
+  if(!muteMelody && mel.notes[s])  playMelody(mel.notes[s],t,sd*1.55);
+  // Visual step sync
+  const delay=(t-AC.currentTime)*1000;
+  setTimeout(()=>setVisualStep(s,beat),Math.max(0,delay));
+}
+function scheduler(){
+  while(nextStepTime<AC.currentTime+LOOKAHEAD){
+    scheduleStep(step,nextStepTime);
+    step=(step+1)%16;
+    nextStepTime+=getStepDur();
+  }
+  schedulerTimer=setTimeout(scheduler,INTERVAL);
+}
+
+// ── Transport ─────────────────────────────────────────
+function togglePlay(){
+  initAC();
+  if(AC.state==='suspended')AC.resume();
+  isPlaying=!isPlaying;
+  const btn=document.getElementById('play-btn');
+  if(isPlaying){
+    step=0; nextStepTime=AC.currentTime+0.05;
+    scheduler();
+    btn.textContent='⏹ Stop'; btn.classList.add('playing');
+  } else {
+    clearTimeout(schedulerTimer); schedulerTimer=null;
+    btn.textContent='▶ Play'; btn.classList.remove('playing');
+    clearSteps();
+  }
+}
+function setBpm(v){
+  bpm=v; document.getElementById('bpm-val').textContent=v;
+}
+function toggleMasterMute(){
+  initAC();
+  masterMuted=!masterMuted;
+  masterGain.gain.setTargetAtTime(masterMuted?0:.82,AC.currentTime,.05);
+  document.getElementById('master-mute-btn').textContent=masterMuted?'🔇':'🔊';
+}
+function toggleMute(t){
+  if(t==='drums') muteDrums=!muteDrums;
+  else if(t==='bass') muteBass=!muteBass;
+  else muteMelody=!muteMelody;
+  const btn=document.getElementById('mute-'+t);
+  const on=!(t==='drums'?muteDrums:t==='bass'?muteBass:muteMelody);
+  btn.textContent=on?'🔊 on':'🔇 off';
+  btn.classList.toggle('muted',!on);
+}
+
+// ── Visualizer ────────────────────────────────────────
+function drawViz(){
+  const cv=document.getElementById('viz');
+  const ctx=cv.getContext('2d');
+  cv.width=cv.offsetWidth||600; cv.height=cv.offsetHeight||44;
+  const W=cv.width,H=cv.height;
+  requestAnimationFrame(drawViz);
+  ctx.clearRect(0,0,W,H);
+  if(!analyser){return;}
+  const bins=analyser.frequencyBinCount;
+  const data=new Uint8Array(bins);
+  analyser.getByteFrequencyData(data);
+  const bars=48, bw=W/bars;
+  for(let i=0;i<bars;i++){
+    const idx=Math.floor(i/bars*bins*.45); // focus on audible range
+    const v=data[idx]/255;
+    const bh=Math.max(2,v*H);
+    const hue=160+v*120;
+    ctx.fillStyle=`hsla(${hue},80%,${50+v*25}%,${0.5+v*0.5})`;
+    ctx.beginPath();
+    ctx.roundRect(i*bw+1,H-bh,bw-2,bh,2);
+    ctx.fill();
+  }
+}
+
+// ── Step indicator ────────────────────────────────────
+function buildSteps(){
+  const row=document.getElementById('steps'); row.innerHTML='';
+  for(let i=0;i<16;i++){
+    const d=document.createElement('div'); d.className='step'; d.id='st'+i;
+    row.appendChild(d);
+  }
+}
+function setVisualStep(s,beat){
+  document.querySelectorAll('.step').forEach((el,i)=>{
+    el.classList.remove('active');
+    el.style.background=beat.kick[i]?'rgba(249,115,22,.3)':'rgba(255,255,255,.08)';
+    el.style.transform='';
+  });
+  const cur=document.getElementById('st'+s);
+  if(!cur)return;
+  cur.classList.add('active');
+  cur.style.background='#ffd700';
+  cur.style.transform='scaleY(1.4)';
+}
+function clearSteps(){
+  document.querySelectorAll('.step').forEach(el=>{
+    el.style.background='rgba(255,255,255,.08)';
+    el.style.transform='';
+    el.classList.remove('active');
+  });
+}
+
+// ── Card rendering ────────────────────────────────────
+function mkCards(containerId,data,selIdx,onSel){
+  const wrap=document.getElementById(containerId); wrap.innerHTML='';
+  data.forEach((item,i)=>{
+    const c=document.createElement('div'); c.className='card'+(i===selIdx?' sel':'');
+    c.style.setProperty('--col',item.col);
+    if(i===selIdx){
+      c.style.borderColor=item.col;
+      c.style.background=hexA(item.col,0.18);
+      c.style.boxShadow=`0 0 16px ${hexA(item.col,0.4)}`;
+    }
+    c.innerHTML=`<div class="ce">${item.e}</div><div class="cn">${item.name}</div>`;
+    c.onclick=()=>{onSel(i);mkCards(containerId,data,i,onSel);};
+    wrap.appendChild(c);
+  });
+}
+function hexA(hex,a){
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+// ── Init ──────────────────────────────────────────────
+buildSteps();
+mkCards('beat-cards',  BEATS,    selBeat,    i=>{selBeat=i;});
+mkCards('bass-cards',  BASSLINES,selBass,    i=>{selBass=i;});
+mkCards('melody-cards',MELODIES, selMelody,  i=>{selMelody=i;});
+
+// Resume AudioContext on any tap (iOS requirement)
+document.addEventListener('pointerdown',()=>{if(AC&&AC.state==='suspended')AC.resume();},{once:false});
+</script>
+</body>
+</html>

@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Color Mixer Lab 🧪</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#070d08;color:#fff;font-family:'Comic Sans MS','Chalkboard SE',cursive;height:100vh;overflow:hidden;user-select:none}
+.screen{display:none;position:fixed;inset:0;z-index:1}
+.screen.active{display:flex;flex-direction:column;align-items:center;justify-content:center}
+.card{background:rgba(0,22,8,.9);border-radius:22px;padding:24px 32px;width:min(500px,94vw);border:2px solid rgba(0,220,80,.2);backdrop-filter:blur(8px)}
+h1{text-align:center;font-size:clamp(1.3em,4vw,2em);margin-bottom:14px}
+label{display:block;margin:10px 0 3px;font-size:.86em;opacity:.75}
+.prow{display:flex;gap:8px;align-items:center;margin:4px 0}
+.prow input{flex:1;padding:7px 11px;border-radius:10px;border:2px solid rgba(0,220,80,.2);background:rgba(0,220,80,.06);color:#fff;font-family:inherit;font-size:1em}
+.prow input::placeholder{color:rgba(255,255,255,.4)}
+select{width:100%;padding:7px 10px;border-radius:10px;border:2px solid rgba(0,220,80,.2);background:rgba(0,12,4,.95);color:#fff;font-family:inherit}
+select option{background:#070d08}
+.rbtns{display:flex;gap:8px;margin:5px 0}
+.btn{padding:8px 18px;border-radius:12px;border:none;cursor:pointer;font-family:inherit;font-size:.93em;font-weight:700;transition:transform .1s}
+.btn:active{transform:scale(.95)}
+.btn-ghost{background:rgba(0,220,80,.1);color:#4dff88;border:1px solid rgba(0,220,80,.25)}
+.btn-go{background:#00c853;color:#001a00;font-size:1.15em;padding:13px 40px;border-radius:18px}
+.btn-go:hover{filter:brightness(1.1)}
+#hud{position:fixed;top:0;left:0;right:0;height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;background:rgba(0,0,0,.8);z-index:10;border-bottom:1px solid rgba(0,200,80,.12)}
+#tbar-wrap{position:fixed;top:52px;left:0;right:0;height:4px;background:rgba(0,200,80,.12);z-index:10}
+#tbar{height:100%;background:#00c853;transition:width .25s linear,background .5s}
+#game-main{position:fixed;top:56px;left:0;right:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:space-evenly;padding:10px 14px 14px;z-index:5;overflow:hidden}
+.flasks-row{display:flex;gap:clamp(18px,6vw,60px);align-items:flex-end;justify-content:center}
+.flask-wrap{display:flex;flex-direction:column;align-items:center;gap:4px}
+.flask-lbl{font-size:.74em;font-weight:700;opacity:.55;text-transform:uppercase;letter-spacing:.5px}
+.flask-name{font-size:clamp(.8em,2.5vw,1em);font-weight:700;min-height:1.3em;text-align:center;transition:color .3s}
+.pal-area{width:100%;max-width:540px;text-align:center}
+.pal-hint{font-size:.8em;opacity:.6;margin-bottom:7px}
+.pal-row{display:flex;gap:7px;justify-content:center;flex-wrap:wrap}
+.ibtn{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:6px 8px;border-radius:12px;border:3px solid transparent;background:rgba(255,255,255,.05);transition:all .14s;-webkit-tap-highlight-color:transparent}
+.ibtn.sel{border-color:rgba(255,255,255,.75);background:rgba(255,255,255,.12);transform:scale(1.1)}
+.ibtn.maxed{opacity:.28;pointer-events:none}
+.iswatch{width:38px;height:38px;border-radius:50%;border:2px solid rgba(255,255,255,.18);box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.iname{font-size:.62em;font-weight:700;opacity:.85}
+.action-row{display:flex;gap:12px;justify-content:center}
+.btn-mix{background:linear-gradient(135deg,#a855f7,#7c3aed);color:#fff;font-size:1em;padding:10px 26px;border-radius:16px;border:2px solid rgba(192,132,252,.3)}
+.btn-mix:not(:disabled):hover{filter:brightness(1.15)}
+.btn-mix:disabled{opacity:.32;cursor:not-allowed}
+.btn-clr{background:rgba(255,80,80,.08);color:#ff9090;font-size:.88em;padding:10px 18px;border-radius:14px;border:2px solid rgba(255,80,80,.18)}
+#atm-dots{font-size:1.3em;letter-spacing:4px;min-height:1.5em;text-align:center}
+#pz-info{font-size:.8em;opacity:.58;text-align:center;min-height:1.2em}
+#particles{position:fixed;inset:0;pointer-events:none;z-index:60}
+@keyframes bup{0%{transform:translateY(0);opacity:.7}100%{transform:translateY(-28px);opacity:0}}
+@keyframes fshake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+.fshake{animation:fshake .32s ease}
+.pts{position:fixed;font-size:1.8em;font-weight:700;color:#ffd700;pointer-events:none;animation:rise .9s forwards;z-index:50}
+@keyframes rise{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-70px)}}
+@keyframes cpop{0%{opacity:1;transform:translate(0,0) scale(1)}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(0)}}
+#transition{background:rgba(0,5,2,.97)}
+.tc{text-align:center;padding:30px 20px}
+#scoreboard{background:linear-gradient(180deg,#030808,#040d06)}
+.srow{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(0,200,80,.12);font-size:1.2em}
+.srow:last-child{border:none}
+#mascot{position:fixed;bottom:12px;right:10px;width:68px;z-index:20;display:none}
+.mfloat #msvg{animation:mfloat 3s ease-in-out infinite}
+@keyframes mfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.mhappy #msvg{animation:mhappy .55s ease forwards}
+@keyframes mhappy{0%{transform:translateY(0) rotate(0)}35%{transform:translateY(-28px) rotate(14deg)}65%{transform:translateY(-6px) rotate(-7deg)}100%{transform:translateY(0) rotate(0)}}
+.moops #msvg{animation:moops .4s ease forwards}
+@keyframes moops{0%,100%{transform:rotate(0)}25%{transform:rotate(-20deg)}75%{transform:rotate(20deg)}}
+.mcelebrate #msvg{animation:mcelebrate 1s ease forwards}
+@keyframes mcelebrate{0%{transform:rotate(0) scale(1)}50%{transform:rotate(200deg) scale(1.35)}100%{transform:rotate(360deg) scale(1)}}
+</style>
+</head>
+<body>
+<div id="particles"></div>
+<div id="mascot" class="mfloat">
+  <svg id="msvg" viewBox="0 0 80 122" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="40" cy="30" r="30" fill="rgba(78,193,224,.12)"/>
+    <circle cx="40" cy="30" r="26" fill="#d8eef5" stroke="#9bbcc8" stroke-width="2"/>
+    <ellipse cx="40" cy="32" rx="16" ry="12.5" fill="#1a9ecb" opacity=".88"/>
+    <ellipse cx="33" cy="25" rx="5" ry="3" fill="rgba(255,255,255,.38)" transform="rotate(-18,33,25)"/>
+    <circle cx="34" cy="31" r="3" fill="#fff"/><circle cx="46" cy="31" r="3" fill="#fff"/>
+    <circle cx="35" cy="32" r="1.7" fill="#1a2a3a"/><circle cx="47" cy="32" r="1.7" fill="#1a2a3a"/>
+    <path d="M 34 39 Q 40 45.5 46 39" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <line x1="40" y1="4" x2="40" y2="13" stroke="#9bbcc8" stroke-width="2.5"/>
+    <circle cx="40" cy="3" r="3.2" fill="#ffd700"/>
+    <rect x="17" y="53" width="46" height="47" rx="14" fill="#d8eef5" stroke="#9bbcc8" stroke-width="2"/>
+    <rect x="26" y="62" width="28" height="16" rx="5" fill="#1a9ecb" opacity=".58"/>
+    <circle cx="40" cy="70" r="4.5" fill="#ffd700" opacity=".85"/>
+    <rect x="19" y="64" width="8" height="5" rx="2" fill="#e8540a" opacity=".7"/>
+    <rect x="1" y="56" width="17" height="11" rx="5.5" fill="#d8eef5" stroke="#9bbcc8" stroke-width="1.8"/>
+    <rect x="62" y="56" width="17" height="11" rx="5.5" fill="#d8eef5" stroke="#9bbcc8" stroke-width="1.8"/>
+    <circle cx="5" cy="62" r="5" fill="#aac8d8"/><circle cx="75" cy="62" r="5" fill="#aac8d8"/>
+    <rect x="21" y="96" width="14" height="21" rx="7" fill="#d8eef5" stroke="#9bbcc8" stroke-width="1.8"/>
+    <rect x="45" y="96" width="14" height="21" rx="7" fill="#d8eef5" stroke="#9bbcc8" stroke-width="1.8"/>
+    <ellipse cx="28" cy="118" rx="9.5" ry="5" fill="#aac8d8"/>
+    <ellipse cx="52" cy="118" rx="9.5" ry="5" fill="#aac8d8"/>
+  </svg>
+</div>
+
+<!-- SETUP -->
+<div id="setup" class="screen active">
+  <div class="card">
+    <h1>🧪 Color Mixer Lab</h1>
+    <label>🧑‍🔬 Players</label>
+    <div id="plist">
+      <div class="prow"><span>🧑‍🔬</span><input type="text" placeholder="Your name" class="pname" autocomplete="off" autocorrect="off" autocapitalize="off"></div>
+    </div>
+    <div class="rbtns">
+      <button class="btn btn-ghost" onclick="addP()">+ Add Player</button>
+      <button class="btn btn-ghost" onclick="remP()">− Remove</button>
+    </div>
+    <label>🧠 Difficulty</label>
+    <select id="diff">
+      <option value="easy">🐣 Easy — mix 2 primary colors</option>
+      <option value="medium" selected>🐥 Medium — bigger palette, 2 colors</option>
+      <option value="hard">🦅 Hard — 3-color mixes!</option>
+    </select>
+    <label>⏱ Time per Turn</label>
+    <select id="ttm">
+      <option value="60" selected>60 seconds</option>
+      <option value="90">90 seconds</option>
+      <option value="120">2 minutes</option>
+      <option value="180">3 minutes</option>
+    </select>
+    <br><br>
+    <div style="text-align:center"><button class="btn btn-go" onclick="initGame()">🧪 Start Experiment!</button></div>
+  </div>
+</div>
+
+<!-- TRANSITION -->
+<div id="transition" class="screen"><div class="tc" id="tc"></div></div>
+
+<!-- GAME -->
+<div id="game" class="screen">
+  <div id="hud">
+    <span id="hud-name">🧑‍🔬</span>
+    <span id="hud-score">⭐ 0</span>
+    <span id="hud-time">⏱ 60</span>
+    <button id="mute-btn" onclick="toggleMute()" style="background:none;border:none;color:#fff;font-size:1.3em;cursor:pointer;padding:4px">🔊</button>
+  </div>
+  <div id="tbar-wrap"><div id="tbar"></div></div>
+  <div id="game-main">
+    <div class="flasks-row">
+      <div class="flask-wrap">
+        <div class="flask-lbl">🎯 Target</div>
+        <div id="tgt-flask"></div>
+        <div class="flask-name" id="tgt-name">?</div>
+      </div>
+      <div style="font-size:2em;opacity:.28;padding-bottom:30px">→</div>
+      <div class="flask-wrap">
+        <div class="flask-lbl">🧪 Your Mix</div>
+        <div id="mix-flask"></div>
+        <div class="flask-name" id="mix-name" style="color:#444">Empty</div>
+      </div>
+    </div>
+    <div id="atm-dots">❤️❤️❤️</div>
+    <div class="pal-area">
+      <div class="pal-hint" id="pal-hint">Pick colors to mix:</div>
+      <div class="pal-row" id="palette"></div>
+    </div>
+    <div class="action-row">
+      <button class="btn btn-clr" onclick="clearSel()">🗑️ Clear</button>
+      <button class="btn btn-mix" id="mix-btn" disabled onclick="submitMix()">⚗️ Mix It!</button>
+    </div>
+    <div id="pz-info"></div>
+  </div>
+</div>
+
+<!-- SCOREBOARD -->
+<div id="scoreboard" class="screen">
+  <div class="card" style="max-width:440px">
+    <h1 id="sb-title">🏆 Final Scores!</h1><br>
+    <div id="slist"></div><br>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+      <button class="btn btn-go" onclick="initGame(true)">🔄 Play Again</button>
+      <button class="btn btn-ghost" onclick="showScreen('setup')">⚙️ New Game</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Data ──────────────────────────────────────────────
+const COLORS = {
+  red:    {n:'Red',    h:'#E8334A'},
+  yellow: {n:'Yellow', h:'#FFD700'},
+  blue:   {n:'Blue',   h:'#2255DD'},
+  white:  {n:'White',  h:'#DDDDDD'},
+  black:  {n:'Black',  h:'#3a3a4a'},
+  orange: {n:'Orange', h:'#FF8C00'},
+  green:  {n:'Green',  h:'#27AE60'},
+  purple: {n:'Purple', h:'#9044CC'},
+};
+
+const PUZZLES = {
+  easy:[
+    {t:'Orange',   h:'#FF8C00', r:['red','yellow'],  p:['red','yellow','blue','white']},
+    {t:'Green',    h:'#27AE60', r:['blue','yellow'],  p:['red','yellow','blue','white']},
+    {t:'Purple',   h:'#9044CC', r:['red','blue'],     p:['red','yellow','blue','white']},
+    {t:'Pink',     h:'#FF85A1', r:['red','white'],    p:['red','yellow','blue','white']},
+    {t:'Sky Blue', h:'#87CEEB', r:['blue','white'],   p:['red','yellow','blue','white']},
+  ],
+  medium:[
+    {t:'Peach',    h:'#FFCBA4', r:['orange','white'],  p:['red','yellow','blue','white','orange','green','purple']},
+    {t:'Lavender', h:'#D8B4FE', r:['purple','white'],  p:['red','yellow','blue','white','orange','green','purple']},
+    {t:'Lime',     h:'#BFFF00', r:['green','yellow'],  p:['red','yellow','blue','white','orange','green','purple']},
+    {t:'Navy',     h:'#1B2A8B', r:['blue','black'],    p:['red','yellow','blue','black','orange','green','purple']},
+    {t:'Teal',     h:'#008B8B', r:['blue','green'],    p:['red','yellow','blue','white','orange','green','purple']},
+    {t:'Cream',    h:'#FFFACD', r:['yellow','white'],  p:['red','yellow','blue','white','orange','green','purple']},
+    {t:'Dark Red', h:'#8B0000', r:['red','black'],     p:['red','yellow','blue','white','black','orange','green']},
+  ],
+  hard:[
+    {t:'Brown',  h:'#8B4513', r:['red','yellow','blue'],    p:['red','yellow','blue','white','black','orange','green','purple']},
+    {t:'Coral',  h:'#FF6B6B', r:['red','orange','white'],   p:['red','yellow','blue','white','black','orange','green','purple']},
+    {t:'Mint',   h:'#98FF98', r:['green','white','yellow'], p:['red','yellow','blue','white','black','orange','green','purple']},
+    {t:'Olive',  h:'#808000', r:['yellow','green','black'], p:['red','yellow','blue','white','black','orange','green','purple']},
+    {t:'Lilac',  h:'#C8A2C8', r:['blue','purple','white'],  p:['red','yellow','blue','white','black','orange','green','purple']},
+  ]
+};
+
+const MEDALS = ['🥇','🥈','🥉','🏅'];
+const PTS    = [100, 60, 30];
+
+// ── Audio ─────────────────────────────────────────────
+let AC, muted = false;
+function initAC() { if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)(); }
+function toggleMute() { muted = !muted; document.getElementById('mute-btn').textContent = muted ? '🔇' : '🔊'; }
+function tone(f, dur, type='sine', vol=.22, when=0) {
+  if (muted || !AC) return;
+  const t=AC.currentTime+when, o=AC.createOscillator(), g=AC.createGain();
+  o.connect(g); g.connect(AC.destination);
+  o.type=type; o.frequency.value=f;
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.001, t+dur);
+  o.start(t); o.stop(t+dur+.05);
+}
+function sndOk()    { [523,659,784,1047].forEach((f,i) => tone(f,.14,'sine',.22,i*.07)); }
+function sndWrong() { [220,160].forEach((f,i) => tone(f,.22,'triangle',.14,i*.11)); }
+function sndStart() { [392,523,659,784,1047].forEach((f,i) => tone(f,.18,'sine',.2,i*.09)); }
+function sndEnd()   { [784,659,523,392,262].forEach((f,i) => tone(f,.2,'sine',.19,i*.1)); }
+function sndTick()  { tone(880,.06,'square',.08); }
+function sndClick() { tone(660,.07,'sine',.09); }
+
+// ── Flask SVG ─────────────────────────────────────────
+let _fid = 0;
+function mkFlask(hex, sz=105, bubbles=false) {
+  const id = 'fl'+(++_fid);
+  const body = 'M22,2 L22,26 L4,72 Q1,88 30,88 Q59,88 56,72 L38,26 L38,2 Z';
+  const fill = 'M18,34 L4,72 Q1,88 30,88 Q59,88 56,72 L42,34 Z';
+  const bubs = bubbles ? [[21,70,2.2,1.7,0],[35,63,1.6,2.1,.6],[27,77,1.3,1.9,1.1]]
+    .map(([cx,cy,r,d,dl]) =>
+      `<circle cx="${cx}" cy="${cy}" r="${r}" fill="rgba(255,255,255,.28)" clip-path="url(#${id})" style="animation:bup ${d}s ease-in infinite ${dl}s"/>`)
+    .join('') : '';
+  return `<svg viewBox="0 0 60 90" width="${sz}" height="${sz*1.5}" style="overflow:visible;filter:drop-shadow(0 4px 20px ${hex}66)">
+    <defs><clipPath id="${id}"><path d="${body}"/></clipPath></defs>
+    <path d="${body}" fill="rgba(180,230,255,.09)" stroke="rgba(180,230,255,.4)" stroke-width="2"/>
+    <path d="${fill}" fill="${hex}" opacity=".9" clip-path="url(#${id})"/>
+    ${bubs}
+    <ellipse cx="13" cy="56" rx="3.5" ry="6" fill="rgba(255,255,255,.09)" transform="rotate(-20,13,56)"/>
+    <rect x="18" y="-3" width="24" height="6" rx="3" fill="rgba(190,155,90,.7)" stroke="rgba(200,165,100,.85)" stroke-width="1.2"/>
+  </svg>`;
+}
+
+// ── Color mix logic ───────────────────────────────────
+function mKey(arr) { return [...arr].sort().join('+'); }
+
+const MIX_RESULTS = {
+  // 2-primary
+  'red+yellow':         {n:'Orange',       h:'#FF8C00'},
+  'blue+yellow':        {n:'Green',        h:'#27AE60'},
+  'blue+red':           {n:'Purple',       h:'#9044CC'},
+  // primary + white
+  'red+white':          {n:'Pink',         h:'#FF85A1'},
+  'blue+white':         {n:'Sky Blue',     h:'#87CEEB'},
+  'white+yellow':       {n:'Cream',        h:'#FFFACD'},
+  // primary + black
+  'black+blue':         {n:'Navy',         h:'#1B2A8B'},
+  'black+red':          {n:'Dark Red',     h:'#8B0000'},
+  'black+yellow':       {n:'Olive',        h:'#6B6B00'},
+  // secondary + secondary
+  'blue+green':         {n:'Teal',         h:'#008B8B'},
+  'green+yellow':       {n:'Lime',         h:'#BFFF00'},
+  'orange+red':         {n:'Vermillion',   h:'#E34234'},
+  'orange+yellow':      {n:'Amber',        h:'#FFBF00'},
+  'blue+purple':        {n:'Indigo',       h:'#4B0082'},
+  'purple+red':         {n:'Magenta',      h:'#C2185B'},
+  // complementary mixes (= brown family)
+  'green+red':          {n:'Brown',        h:'#6B4226'},
+  // secondary + white
+  'orange+white':       {n:'Peach',        h:'#FFCBA4'},
+  'purple+white':       {n:'Lavender',     h:'#D8B4FE'},
+  'green+white':        {n:'Sage',         h:'#B2C9A0'},
+  // secondary + black
+  'black+green':        {n:'Forest Green', h:'#1B5E20'},
+  'black+orange':       {n:'Rust',         h:'#B7410E'},
+  'black+purple':       {n:'Dark Violet',  h:'#2E003E'},
+  // 3-color hard
+  'blue+red+yellow':    {n:'Brown',        h:'#8B4513'},
+  'orange+red+white':   {n:'Coral',        h:'#FF6B6B'},
+  'green+white+yellow': {n:'Mint',         h:'#98FF98'},
+  'black+green+yellow': {n:'Olive',        h:'#808000'},
+  'blue+purple+white':  {n:'Lilac',        h:'#C8A2C8'},
+  'blue+green+white':   {n:'Aqua',         h:'#7FFFD4'},
+  'orange+red+yellow':  {n:'Flame',        h:'#FF4500'},
+  'black+orange+red':   {n:'Rust',         h:'#B7410E'},
+  'blue+red+white':     {n:'Mauve',        h:'#E0B0D5'},
+  'green+orange+yellow':{n:'Chartreuse',   h:'#ADFF2F'},
+};
+
+function blendHex(names) {
+  const cs = names.map(n => {
+    const h = COLORS[n].h;
+    return { r:parseInt(h.slice(1,3),16), g:parseInt(h.slice(3,5),16), b:parseInt(h.slice(5,7),16) };
+  });
+  const avg = k => Math.round(cs.reduce((a,c)=>a+c[k],0)/cs.length);
+  return `rgb(${avg('r')},${avg('g')},${avg('b')})`;
+}
+
+function getMix(sel) {
+  if (!sel.length) return { n:'Empty', h:'#1e2a1e' };
+  if (sel.length === 1) return { n:COLORS[sel[0]].n, h:COLORS[sel[0]].h };
+  return MIX_RESULTS[mKey(sel)] || { n:'Mystery!', h:blendHex(sel) };
+}
+
+// ── Game state ────────────────────────────────────────
+let players=[], scores=[], pidx=0, turnSec=60, dk='medium';
+let pq=[], cur=null, sel=[], att=0, solved=0;
+let timerID=null, tLeft=0, gr=false;
+
+// ── UI helpers ────────────────────────────────────────
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.getElementById('mascot').style.display = id==='setup' ? 'none' : 'block';
+}
+function setMascot(s) {
+  const m = document.getElementById('mascot');
+  m.className=''; void m.offsetWidth; m.className = s||'mfloat';
+  if (s && s!=='mfloat') m.addEventListener('animationend', ()=>{ m.className='mfloat'; }, {once:true});
+}
+function addP() {
+  const l=document.getElementById('plist'); if(l.children.length>=4)return;
+  const n=l.children.length+1, d=document.createElement('div'); d.className='prow';
+  d.innerHTML=`<span>🧑‍🔬</span><input type="text" placeholder="Player ${n}" class="pname" autocomplete="off" autocorrect="off" autocapitalize="off">`;
+  l.appendChild(d);
+}
+function remP() { const l=document.getElementById('plist'); if(l.children.length>1) l.removeChild(l.lastChild); }
+function shuffle(a) { const b=[...a]; for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];} return b; }
+
+function confetti(x, y, col) {
+  for (let i=0;i<14;i++) {
+    const a=Math.random()*Math.PI*2, d=40+Math.random()*70;
+    const sp=document.createElement('div');
+    sp.style.cssText=`position:fixed;width:9px;height:9px;border-radius:50%;background:${col};left:${x}px;top:${y}px;pointer-events:none;--dx:${Math.cos(a)*d}px;--dy:${Math.sin(a)*d}px;animation:cpop .6s forwards;z-index:60`;
+    document.getElementById('particles').appendChild(sp);
+    setTimeout(()=>sp.remove(), 700);
+  }
+}
+
+// ── Init game ─────────────────────────────────────────
+function initGame(same=false) {
+  initAC();
+  if (!same) players=[...document.querySelectorAll('.pname')].map((el,i)=>el.value.trim()||`Player ${i+1}`);
+  scores = players.map(()=>0);
+  pidx = 0;
+  turnSec = parseInt(document.getElementById('ttm').value);
+  dk = document.getElementById('diff').value;
+  doTrans();
+}
+
+function doTrans() {
+  clearInterval(timerID); gr=false;
+  showScreen('transition'); setMascot('mfloat');
+  const solo = players.length===1;
+  const prev = !solo&&pidx>0 ? `<p style="opacity:.6;margin-top:8px">Previous: ${scores[pidx-1]} ⭐</p>` : '';
+  document.getElementById('tc').innerHTML=`
+    <div style="font-size:3.5em;margin-bottom:10px">${['🧪','⭐','🔬','🌙'][pidx%4]}</div>
+    <h1 style="font-size:2.2em">${solo?'Ready, Scientist!':players[pidx]+"'s Turn!"}</h1>
+    <p style="opacity:.75;margin:12px 0 6px">Mix colors to match the target flask! 🎨</p>
+    ${prev}<br>
+    <button class="btn btn-go" style="font-size:1.2em" onclick="startTurn()">🧪 Start Mixing!</button>`;
+}
+
+// ── Turn ──────────────────────────────────────────────
+function startTurn() {
+  showScreen('game'); sndStart();
+  pq=shuffle([...PUZZLES[dk]]); sel=[]; solved=0; att=0; gr=true;
+  document.getElementById('hud-name').textContent=`🧑‍🔬 ${players[pidx]}`;
+  document.getElementById('hud-score').textContent=`⭐ 0`;
+  tLeft=turnSec; document.getElementById('tbar').style.width='100%';
+  setMascot('mfloat');
+  nextPuz(false);
+
+  const t0=Date.now(); let lastTick=turnSec+1;
+  timerID=setInterval(()=>{
+    if(!gr) return;
+    tLeft=Math.max(0, turnSec-(Date.now()-t0)/1000);
+    const c=Math.ceil(tLeft);
+    document.getElementById('hud-time').textContent=`⏱ ${c}`;
+    const pct=tLeft/turnSec;
+    document.getElementById('tbar').style.width=(pct*100)+'%';
+    document.getElementById('tbar').style.background=pct>.3?'#00c853':'#e8540a';
+    if(tLeft<=5&&c<lastTick){lastTick=c;sndTick();}
+    if(tLeft<=0) endTurn();
+  },150);
+}
+
+function endTurn() {
+  if(!gr) return; gr=false;
+  clearInterval(timerID); sndEnd(); setMascot('mcelebrate');
+  setTimeout(()=>{ pidx++; pidx<players.length ? doTrans() : showBoard(); }, 950);
+}
+
+// ── Puzzle ────────────────────────────────────────────
+function nextPuz(adv=true) {
+  if (!pq.length) pq=shuffle([...PUZZLES[dk]]);
+  cur = pq.pop(); att=0; sel=[];
+  renderPuz();
+}
+
+function renderPuz() {
+  document.getElementById('tgt-flask').innerHTML = mkFlask(cur.h, 105, true);
+  document.getElementById('tgt-name').textContent = cur.t;
+  renderMix(); renderDots(); renderPal();
+  document.getElementById('pz-info').textContent=`✅ Solved: ${solved}`;
+  document.getElementById('pal-hint').textContent=`Pick ${cur.r.length} color${cur.r.length>1?'s':''} to mix:`;
+}
+
+function renderMix() {
+  const m = getMix(sel);
+  document.getElementById('mix-flask').innerHTML = mkFlask(m.h, 105, sel.length>0);
+  document.getElementById('mix-name').textContent = sel.length ? m.n : 'Empty';
+  document.getElementById('mix-name').style.color = sel.length ? m.h : '#444';
+  document.getElementById('mix-btn').disabled = sel.length===0;
+}
+
+function renderDots() {
+  const hearts=['❤️','❤️','❤️'];
+  for(let i=0;i<3-att;i++) hearts[i]='❤️';
+  for(let i=3-att;i<3;i++) hearts[i]='🖤';
+  // Show hint after 2 wrong
+  if(att>=2) {
+    document.getElementById('pz-info').textContent=`💡 Hint: Try ${cur.r.map(c=>COLORS[c].n).join(' + ')}`;
+  }
+  document.getElementById('atm-dots').textContent=hearts.join('');
+}
+
+function renderPal() {
+  const maxSel = cur.r.length;
+  const pal = document.getElementById('palette');
+  pal.innerHTML='';
+  cur.p.forEach(cid => {
+    const d=document.createElement('div');
+    d.className='ibtn'+(sel.includes(cid)?' sel':'')+(sel.length>=maxSel&&!sel.includes(cid)?' maxed':'');
+    d.innerHTML=`<div class="iswatch" style="background:${COLORS[cid].h}"></div><div class="iname">${COLORS[cid].n}</div>`;
+    d.onclick=()=>toggleColor(cid, maxSel);
+    pal.appendChild(d);
+  });
+}
+
+function toggleColor(cid, max) {
+  sndClick();
+  if (sel.includes(cid)) { sel=sel.filter(c=>c!==cid); }
+  else if (sel.length<max) { sel.push(cid); }
+  renderMix(); renderPal();
+}
+
+function clearSel() { sel=[]; renderMix(); renderPal(); }
+
+function submitMix() {
+  if (!sel.length || !cur) return;
+  const correct = mKey(sel)===mKey(cur.r);
+  if (correct) {
+    const pts = PTS[Math.min(att, PTS.length-1)];
+    scores[pidx]+=pts;
+    document.getElementById('hud-score').textContent=`⭐ ${scores[pidx]}`;
+    sndOk(); setMascot('mhappy'); solved++;
+    // points popup
+    const mf=document.getElementById('mix-flask').getBoundingClientRect();
+    const px=mf.left+mf.width/2, py=mf.top+mf.height/3;
+    const ptEl=document.createElement('div');
+    ptEl.className='pts'; ptEl.textContent=`+${pts}`;
+    ptEl.style.cssText=`left:${px-25}px;top:${py}px`;
+    document.body.appendChild(ptEl); setTimeout(()=>ptEl.remove(),950);
+    confetti(px, py, cur.h);
+    setTimeout(()=>{ if(gr) nextPuz(); }, 700);
+  } else {
+    att++; sndWrong(); setMascot('moops');
+    const mf=document.getElementById('mix-flask');
+    mf.classList.remove('fshake'); void mf.offsetWidth; mf.classList.add('fshake');
+    renderDots();
+    if (att>=3) {
+      // reveal answer then next
+      document.getElementById('pz-info').textContent=`The answer was: ${cur.r.map(c=>COLORS[c].n).join(' + ')} 🔬`;
+      setTimeout(()=>{ if(gr) nextPuz(); }, 1800);
+    }
+  }
+}
+
+// ── Scoreboard ────────────────────────────────────────
+function showBoard() {
+  showScreen('scoreboard'); setMascot('mcelebrate'); sndStart();
+  const solo=players.length===1;
+  if (solo) {
+    document.getElementById('sb-title').textContent=`🎉 Great job, ${players[0]}!`;
+    document.getElementById('slist').innerHTML=`<div class="srow" style="justify-content:center;font-size:1.5em">⭐ ${scores[0]} points!</div>`;
+  } else {
+    document.getElementById('sb-title').textContent='🏆 Final Scores!';
+    const ranked=[...players.map((n,i)=>({n,s:scores[i]}))].sort((a,b)=>b.s-a.s);
+    document.getElementById('slist').innerHTML=ranked.map((p,i)=>`
+      <div class="srow"><span>${MEDALS[i]||'🏅'} ${p.n}</span><span>${p.s} ⭐</span></div>`).join('');
+  }
+}
+</script>
+</body>
+</html>

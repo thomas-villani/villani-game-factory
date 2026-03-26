@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🚀 Robo Escape!</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:'Segoe UI',sans-serif;
+  background:radial-gradient(ellipse at top,#1a0a40 0%,#0d0d22 70%);
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;
+  padding:14px;color:#fff;user-select:none;overflow-x:hidden;
+}
+h1{
+  font-size:2.3em;margin:6px 0 2px;text-align:center;
+  background:linear-gradient(90deg,#ff6b6b,#fbbf24,#38bdf8,#a78bfa);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.hint{
+  color:#94a3b8;margin-bottom:12px;text-align:center;
+  font-size:1em;min-height:1.4em;transition:color .4s;
+}
+/* Level nav */
+.level-nav{
+  display:flex;gap:8px;margin-bottom:14px;
+  background:rgba(255,255,255,.06);padding:7px 14px;
+  border-radius:30px;border:1px solid rgba(255,255,255,.1);
+}
+.lvl-dot{
+  width:36px;height:36px;border-radius:50%;
+  border:2.5px solid rgba(255,255,255,.2);
+  background:rgba(255,255,255,.07);cursor:pointer;
+  font-size:.9em;font-weight:700;display:flex;
+  align-items:center;justify-content:center;
+  color:#475569;transition:all .2s;
+}
+.lvl-dot.active{border-color:#38bdf8;background:rgba(56,189,248,.15);color:#38bdf8;transform:scale(1.15);}
+.lvl-dot.done{border-color:#4ade80;background:rgba(74,222,128,.13);color:#4ade80;}
+/* Layout */
+.game-area{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;justify-content:center;}
+/* Grid */
+.grid-wrap{position:relative;flex-shrink:0;}
+.grid{
+  display:grid;gap:4px;padding:12px;
+  background:rgba(255,255,255,.04);
+  border:2px solid rgba(255,255,255,.12);
+  border-radius:18px;position:relative;
+}
+.cell{
+  width:66px;height:66px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.85em;
+  background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.07);
+}
+.cell.wall{background:#1e293b;border:1px solid #334155;font-size:1.55em;}
+.cell.goal{
+  background:rgba(250,204,21,.1);border:1px solid rgba(250,204,21,.35);
+  animation:starPulse 2s infinite;
+}
+@keyframes starPulse{0%,100%{box-shadow:0 0 8px rgba(250,204,21,.3)}50%{box-shadow:0 0 22px rgba(250,204,21,.65)}}
+/* Robot */
+.robot{
+  position:absolute;width:66px;height:66px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:2.2em;
+  transition:top .32s cubic-bezier(.4,0,.2,1),left .32s cubic-bezier(.4,0,.2,1),transform .3s ease;
+  pointer-events:none;z-index:10;
+  filter:drop-shadow(0 0 10px rgba(56,189,248,.75));
+}
+@keyframes shake{0%,100%{margin-left:0}20%{margin-left:-8px}40%{margin-left:8px}60%{margin-left:-6px}80%{margin-left:6px}}
+.robot.crashed{animation:shake .45s ease;filter:drop-shadow(0 0 14px rgba(239,68,68,.95));}
+@keyframes hop{0%,100%{margin-top:0}50%{margin-top:-10px}}
+.robot.moving{animation:hop .32s ease;}
+/* Panel */
+.panel-area{width:272px;display:flex;flex-direction:column;gap:11px;}
+.panel{
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.11);
+  border-radius:16px;padding:13px;
+}
+.panel-lbl{font-size:.7em;text-transform:uppercase;letter-spacing:1.5px;color:#64748b;margin-bottom:10px;}
+/* Command buttons */
+.cmd-row{display:flex;gap:7px;margin-bottom:7px;}
+.cmd-row:last-child{margin-bottom:0;}
+.cmd-btn{
+  flex:1;border:none;border-radius:11px;padding:11px 5px;
+  font-weight:700;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+  transition:transform .1s,box-shadow .15s;
+  line-height:1.1;
+}
+.cmd-btn .ico{font-size:1.5em;}
+.cmd-btn .lbl{font-size:.65em;font-weight:600;opacity:.88;}
+.cmd-btn:hover{transform:scale(1.07);box-shadow:0 4px 16px rgba(0,0,0,.45);}
+.cmd-btn:active{transform:scale(.92);}
+.cmd-btn:disabled{opacity:.38;cursor:not-allowed;transform:none;box-shadow:none;}
+.btn-f1{background:linear-gradient(135deg,#15803d,#22c55e);color:#fff;}
+.btn-f2{background:linear-gradient(135deg,#0369a1,#38bdf8);color:#fff;}
+.btn-f3{background:linear-gradient(135deg,#6d28d9,#a78bfa);color:#fff;}
+.btn-tl{background:linear-gradient(135deg,#be123c,#fb7185);color:#fff;}
+.btn-tr{background:linear-gradient(135deg,#b45309,#fbbf24);color:#fff;}
+/* Sequence */
+.seq-area{
+  min-height:58px;display:flex;flex-wrap:wrap;gap:5px;
+  align-content:flex-start;
+}
+.chip{
+  padding:6px 9px;border-radius:20px;font-size:1.1em;
+  cursor:pointer;transition:transform .12s,opacity .12s;
+  border:2px solid transparent;display:inline-flex;align-items:center;
+}
+.chip:hover{opacity:.6;transform:scale(.88);}
+.chip.hi{border-color:#fff;transform:scale(1.2);opacity:1;}
+.chip-f1{background:linear-gradient(135deg,#15803d,#22c55e);}
+.chip-f2{background:linear-gradient(135deg,#0369a1,#38bdf8);}
+.chip-f3{background:linear-gradient(135deg,#6d28d9,#a78bfa);}
+.chip-tl{background:linear-gradient(135deg,#be123c,#fb7185);}
+.chip-tr{background:linear-gradient(135deg,#b45309,#fbbf24);}
+.seq-empty{color:#475569;font-size:.85em;font-style:italic;padding:2px;}
+/* Action buttons */
+.btn-row{display:flex;gap:7px;}
+.run-btn{
+  flex:1;padding:14px;
+  background:linear-gradient(135deg,#f97316,#ef4444);
+  border:none;border-radius:12px;color:#fff;
+  font-size:1.2em;font-weight:800;cursor:pointer;
+  box-shadow:0 4px 18px rgba(239,68,68,.35);
+  transition:transform .1s,box-shadow .2s;
+}
+.run-btn:hover{transform:scale(1.03);box-shadow:0 6px 24px rgba(239,68,68,.5);}
+.run-btn:active{transform:scale(.97);}
+.run-btn:disabled{opacity:.42;cursor:not-allowed;transform:none;box-shadow:none;}
+.icon-btn{
+  padding:14px;background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.15);
+  border-radius:12px;color:#fff;font-size:1.2em;cursor:pointer;
+  transition:background .15s;
+}
+.icon-btn:hover{background:rgba(255,255,255,.2);}
+.icon-btn:disabled{opacity:.38;cursor:not-allowed;}
+/* Messages */
+.msg{
+  padding:12px;border-radius:12px;font-size:1em;font-weight:700;
+  text-align:center;display:none;line-height:1.4;
+}
+.msg-success{background:rgba(74,222,128,.13);border:2px solid #4ade80;color:#86efac;}
+.msg-crash{background:rgba(239,68,68,.13);border:2px solid #ef4444;color:#fca5a5;}
+.msg-miss{background:rgba(251,191,36,.1);border:2px solid #fbbf24;color:#fde68a;}
+/* Next level */
+.next-btn{
+  width:100%;padding:13px;
+  background:linear-gradient(135deg,#15803d,#4ade80);
+  border:none;border-radius:12px;color:#fff;
+  font-size:1.1em;font-weight:800;cursor:pointer;display:none;
+  transition:transform .1s;
+}
+.next-btn:hover{transform:scale(1.02);}
+#confetti{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999;}
+</style>
+</head>
+<body>
+<canvas id="confetti"></canvas>
+<h1>🚀 Robo Escape!</h1>
+<p class="hint" id="hint">Program the rocket to reach the ⭐ star!</p>
+<div class="level-nav" id="levelNav"></div>
+
+<div class="game-area">
+  <div class="grid-wrap">
+    <div class="grid" id="grid">
+      <div class="robot" id="robot">🚀</div>
+    </div>
+  </div>
+
+  <div class="panel-area">
+    <div class="panel">
+      <div class="panel-lbl">🎮 Tap a command to add it</div>
+      <div class="cmd-row">
+        <button class="cmd-btn btn-f1" id="c-f1" onclick="addCmd('f1')">
+          <span class="ico">⬆️</span><span class="lbl">Forward 1</span>
+        </button>
+        <button class="cmd-btn btn-f2" id="c-f2" onclick="addCmd('f2')">
+          <span class="ico">⬆️</span><span class="lbl">Forward 2</span>
+        </button>
+        <button class="cmd-btn btn-f3" id="c-f3" onclick="addCmd('f3')">
+          <span class="ico">⬆️</span><span class="lbl">Forward 3</span>
+        </button>
+      </div>
+      <div class="cmd-row">
+        <button class="cmd-btn btn-tl" id="c-tl" onclick="addCmd('tl')">
+          <span class="ico">↩️</span><span class="lbl">Turn Left</span>
+        </button>
+        <button class="cmd-btn btn-tr" id="c-tr" onclick="addCmd('tr')">
+          <span class="ico">↪️</span><span class="lbl">Turn Right</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-lbl">📋 Your Program <span id="seqCnt" style="color:#38bdf8;font-weight:700"></span></div>
+      <div class="seq-area" id="seq">
+        <span class="seq-empty">Tap commands above to build your program!</span>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="run-btn" id="runBtn" onclick="run()">▶ RUN!</button>
+      <button class="icon-btn" id="undoBtn" onclick="undo()" title="Undo">↩</button>
+      <button class="icon-btn" id="clrBtn" onclick="clearAll()" title="Clear">🗑️</button>
+    </div>
+
+    <div class="msg" id="msg"></div>
+    <button class="next-btn" id="nextBtn" onclick="nextLevel()">🌟 Next Level →</button>
+  </div>
+</div>
+
+<script>
+const C=66,G=4,P=12;
+const TR={up:'right',right:'down',down:'left',left:'up'};
+const TL={up:'left',left:'down',down:'right',right:'up'};
+const DX={up:[-1,0],right:[0,1],down:[1,0],left:[0,-1]};
+const ROT={up:0,right:90,down:180,left:270};
+const EMOJ={f1:'⬆1',f2:'⬆2',f3:'⬆3',tl:'↩️',tr:'↪️'};
+const STEPS={f1:1,f2:2,f3:3};
+const sl=ms=>new Promise(r=>setTimeout(r,ms));
+
+const LEVELS=[
+  {
+    hint:"🟢 Level 1 — Just move Forward to reach the star!",
+    size:5, start:{row:2,col:0,dir:'right'}, goal:{row:2,col:4},
+    walls:[]
+  },
+  {
+    hint:"💡 Level 2 — Go right all the way, then turn and go up!",
+    size:5, start:{row:4,col:0,dir:'right'}, goal:{row:0,col:4},
+    walls:[
+      [0,0],[0,1],[0,2],[0,3],
+      [1,0],[1,1],[1,2],[1,3],
+      [2,0],[2,1],[2,2],[2,3],
+      [3,0],[3,1],[3,2],[3,3]
+    ]
+  },
+  {
+    hint:"🔀 Level 3 — The path zigzags! Turn right, then left, then right again!",
+    size:5, start:{row:0,col:0,dir:'right'}, goal:{row:4,col:4},
+    walls:[
+      [0,3],[0,4],
+      [1,0],[1,1],[1,3],[1,4],
+      [2,0],[2,1],
+      [3,0],[3,1],[3,2],[3,3],
+      [4,0],[4,1],[4,2],[4,3]
+    ]
+  },
+  {
+    hint:"🌀 Level 4 — Go right, then down, then turn and come back left!",
+    size:5, start:{row:0,col:1,dir:'right'}, goal:{row:4,col:1},
+    walls:[
+      [0,0],
+      [1,0],[1,1],[1,2],[1,3],
+      [2,0],[2,1],[2,2],[2,3],
+      [3,0],[3,1],[3,2],[3,3],
+      [4,0]
+    ]
+  },
+  {
+    hint:"⚡ Level 5 — Go right, drop all the way down, then go right again! It's a Z!",
+    size:5, start:{row:0,col:0,dir:'right'}, goal:{row:4,col:4},
+    walls:[
+      [0,3],[0,4],
+      [1,0],[1,1],[1,3],[1,4],
+      [2,0],[2,1],[2,3],[2,4],
+      [3,0],[3,1],[3,3],[3,4],
+      [4,0],[4,1]
+    ]
+  },
+  {
+    hint:"🐍 Level 6 — The path wiggles like a snake! Right, down, right, down, right!",
+    size:5, start:{row:0,col:0,dir:'right'}, goal:{row:4,col:4},
+    walls:[
+      [0,3],[0,4],
+      [1,0],[1,1],[1,3],[1,4],
+      [2,0],[2,1],
+      [3,0],[3,1],[3,2],[3,3],
+      [4,0],[4,1],[4,2],[4,3]
+    ]
+  },
+  {
+    hint:"🏆 Level 7 — THE FINAL CHALLENGE! Find the secret path to the star! 🌟",
+    size:5, start:{row:4,col:2,dir:'up'}, goal:{row:0,col:4},
+    walls:[
+      [0,0],
+      [1,0],[1,3],[1,4],
+      [2,0],[2,1],[2,3],[2,4],
+      [3,0],[3,1],[3,3],[3,4],
+      [4,0],[4,1],[4,3],[4,4]
+    ]
+  }
+];
+
+let cur=0, seq=[], running=false, bot={}, done=new Set();
+
+function init(){buildNav();loadLevel(0);}
+
+function buildNav(){
+  const nav=document.getElementById('levelNav');
+  nav.innerHTML='';
+  LEVELS.forEach((lv,i)=>{
+    const d=document.createElement('div');
+    d.className='lvl-dot'+(i===cur?' active':'')+(done.has(i)?' done':'');
+    d.textContent=i+1;
+    d.onclick=()=>{if(!running)loadLevel(i);};
+    nav.appendChild(d);
+  });
+}
+
+function loadLevel(idx){
+  cur=idx;
+  const lv=LEVELS[idx];
+  bot={...lv.start};
+  seq=[];
+  buildGrid();
+  placeBot();
+  renderSeq();
+  hide('msg');
+  document.getElementById('nextBtn').style.display='none';
+  document.getElementById('hint').textContent=lv.hint;
+  buildNav();
+}
+
+function buildGrid(){
+  const lv=LEVELS[cur];
+  const grid=document.getElementById('grid');
+  grid.querySelectorAll('.cell').forEach(c=>c.remove());
+  grid.style.gridTemplateColumns=`repeat(${lv.size},${C}px)`;
+  const ws=new Set(lv.walls.map(([r,c])=>`${r},${c}`));
+  for(let r=0;r<lv.size;r++){
+    for(let c=0;c<lv.size;c++){
+      const el=document.createElement('div');
+      el.className='cell';
+      if(ws.has(`${r},${c}`)){el.classList.add('wall');el.textContent='🧱';}
+      else if(r===lv.goal.row&&c===lv.goal.col){el.classList.add('goal');el.textContent='⭐';}
+      grid.appendChild(el);
+    }
+  }
+}
+
+function placeBot(animate){
+  const el=document.getElementById('robot');
+  el.style.top=(P+bot.row*(C+G))+'px';
+  el.style.left=(P+bot.col*(C+G))+'px';
+  el.style.transform=`rotate(${ROT[bot.dir]}deg)`;
+  if(animate){
+    el.classList.remove('moving');
+    void el.offsetWidth;
+    el.classList.add('moving');
+  }
+}
+
+function addCmd(cmd){
+  if(running||seq.length>=16)return;
+  seq.push(cmd);renderSeq();hide('msg');
+  document.getElementById('nextBtn').style.display='none';
+}
+function undo(){if(!running){seq.pop();renderSeq();}}
+function clearAll(){
+  if(running)return;
+  seq=[];bot={...LEVELS[cur].start};
+  placeBot();renderSeq();hide('msg');
+}
+
+function renderSeq(){
+  const el=document.getElementById('seq');
+  const cnt=document.getElementById('seqCnt');
+  if(!seq.length){
+    el.innerHTML='<span class="seq-empty">Tap commands above to build your program!</span>';
+    cnt.textContent='';return;
+  }
+  cnt.textContent=`(${seq.length})`;
+  el.innerHTML='';
+  seq.forEach((cmd,i)=>{
+    const ch=document.createElement('span');
+    ch.className=`chip chip-${cmd}`;ch.id=`ch-${i}`;
+    ch.textContent=EMOJ[cmd];ch.title='Tap to remove';
+    ch.onclick=()=>{if(!running){seq.splice(i,1);renderSeq();}};
+    el.appendChild(ch);
+  });
+}
+
+function setUI(d){
+  ['runBtn','undoBtn','clrBtn','c-f1','c-f2','c-f3','c-tl','c-tr']
+    .forEach(id=>document.getElementById(id).disabled=d);
+}
+
+function hi(i){
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('hi'));
+  const c=document.getElementById(`ch-${i}`);
+  if(c)c.classList.add('hi');
+}
+
+async function run(){
+  if(running||!seq.length)return;
+  running=true;setUI(true);hide('msg');
+  bot={...LEVELS[cur].start};placeBot();
+  await sl(180);
+
+  const lv=LEVELS[cur];
+  const ws=new Set(lv.walls.map(([r,c])=>`${r},${c}`));
+
+  for(let i=0;i<seq.length;i++){
+    hi(i);
+    const cmd=seq[i];
+    if(cmd==='tl'){bot.dir=TL[bot.dir];placeBot();await sl(420);}
+    else if(cmd==='tr'){bot.dir=TR[bot.dir];placeBot();await sl(420);}
+    else{
+      const n=STEPS[cmd];
+      for(let s=0;s<n;s++){
+        const [dr,dc]=DX[bot.dir];
+        const nr=bot.row+dr,nc=bot.col+dc;
+        if(nr<0||nr>=lv.size||nc<0||nc>=lv.size||ws.has(`${nr},${nc}`)){
+          await crash();return;
+        }
+        bot.row=nr;bot.col=nc;placeBot(true);
+        await sl(370);
+        if(nr===lv.goal.row&&nc===lv.goal.col){await success();return;}
+      }
+    }
+  }
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('hi'));
+  showMsg("Almost there! Try adding more commands 🤔",'miss');
+  running=false;setUI(false);
+}
+
+async function crash(){
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('hi'));
+  const r=document.getElementById('robot');
+  r.classList.add('crashed');await sl(500);r.classList.remove('crashed');
+  showMsg("💥 Oops! The rocket crashed! Try a different path!",'crash');
+  running=false;setUI(false);
+}
+
+async function success(){
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('hi'));
+  done.add(cur);buildNav();await sl(80);
+  if(cur<LEVELS.length-1){
+    showMsg("🎉 Amazing! You did it! Ready for the next challenge? 🌟",'success');
+    document.getElementById('nextBtn').style.display='block';
+  }else{
+    showMsg("🏆 YOU FINISHED ALL LEVELS! You are a ROBOT GENIUS! 🤖✨",'success');
+  }
+  confetti();running=false;setUI(false);
+}
+
+function nextLevel(){loadLevel(cur+1);}
+
+function showMsg(txt,type){
+  const el=document.getElementById('msg');
+  el.textContent=txt;el.className=`msg msg-${type}`;el.style.display='block';
+}
+function hide(id){document.getElementById(id).style.display='none';}
+
+function confetti(){
+  const cv=document.getElementById('confetti');
+  const ctx=cv.getContext('2d');
+  cv.width=window.innerWidth;cv.height=window.innerHeight;
+  const COLS=['#ff6b6b','#ffa500','#38bdf8','#a78bfa','#4ade80','#fbbf24','#f472b6','#34d399'];
+  const bits=Array.from({length:160},()=>({
+    x:Math.random()*cv.width,y:-40-Math.random()*220,
+    w:7+Math.random()*9,h:4+Math.random()*5,
+    color:COLS[Math.floor(Math.random()*COLS.length)],
+    rot:Math.random()*Math.PI*2,rv:(Math.random()-.5)*.19,
+    vx:(Math.random()-.5)*4,vy:2.5+Math.random()*4.5,op:1
+  }));
+  let raf;
+  (function draw(){
+    ctx.clearRect(0,0,cv.width,cv.height);
+    let alive=false;
+    bits.forEach(b=>{
+      b.x+=b.vx;b.y+=b.vy;b.rot+=b.rv;
+      if(b.y>cv.height*.6)b.op-=.022;
+      if(b.op>0&&b.y<cv.height)alive=true;
+      ctx.save();ctx.globalAlpha=Math.max(0,b.op);
+      ctx.translate(b.x,b.y);ctx.rotate(b.rot);
+      ctx.fillStyle=b.color;ctx.fillRect(-b.w/2,-b.h/2,b.w,b.h);
+      ctx.restore();
+    });
+    if(alive)raf=requestAnimationFrame(draw);
+    else ctx.clearRect(0,0,cv.width,cv.height);
+  })();
+}
+
+init();
+</script>
+</body>
+</html>

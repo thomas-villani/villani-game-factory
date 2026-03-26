@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Letter by Letter 🔡</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#07071f;color:#fff;font-family:'Comic Sans MS','Chalkboard SE',cursive;height:100vh;overflow:hidden;user-select:none}
+canvas#stars{position:fixed;inset:0;pointer-events:none;z-index:0}
+.screen{display:none;position:fixed;inset:0;z-index:1}
+.screen.active{display:flex;flex-direction:column;align-items:center;justify-content:center}
+
+/* SETUP */
+.card{background:rgba(255,255,255,.08);border-radius:22px;padding:26px 32px;width:min(460px,93vw);border:2px solid rgba(255,255,255,.15);backdrop-filter:blur(8px)}
+h1{text-align:center;font-size:clamp(1.4em,4vw,2em);margin-bottom:14px}
+label{display:block;margin:10px 0 4px;font-size:.86em;opacity:.75}
+.prow{display:flex;gap:8px;align-items:center;margin:4px 0}
+.prow input{flex:1;padding:8px 12px;border-radius:10px;border:2px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;font-family:inherit;font-size:1em}
+.prow input::placeholder{color:rgba(255,255,255,.4)}
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin:5px 0}
+.chip{padding:6px 14px;border-radius:18px;background:rgba(255,255,255,.12);border:2px solid transparent;cursor:pointer;font-family:inherit;font-size:.88em;color:#fff}
+.chip.on{background:#e8540a;border-color:#ff8c5a}
+.btn{padding:9px 20px;border-radius:13px;border:none;cursor:pointer;font-family:inherit;font-size:.95em;font-weight:700;transition:transform .1s}
+.btn:active{transform:scale(.95)}
+.btn-ghost{background:rgba(255,255,255,.15);color:#fff}
+.btn-go{background:#4ade80;color:#0a2a0a;font-size:1.2em;padding:14px 44px;border-radius:18px}
+
+/* GAME LAYOUT */
+#game-main{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;padding:12px 10px 8px;gap:8px;z-index:5}
+
+/* Top bar */
+#top-bar{width:100%;max-width:700px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+#level-badge{background:rgba(255,255,255,.1);border-radius:12px;padding:5px 14px;font-size:.85em;font-weight:700;border:1px solid rgba(255,255,255,.18)}
+#progress-dots{display:flex;gap:7px;align-items:center}
+.dot{width:13px;height:13px;border-radius:50%;background:rgba(255,255,255,.2);transition:all .3s}
+.dot.done{background:#4ade80;box-shadow:0 0 8px #4ade80}
+.dot.cur{background:#ffd700;box-shadow:0 0 8px #ffd700;transform:scale(1.25)}
+
+/* Word display */
+#word-display{text-align:center;flex-shrink:0;line-height:1.1}
+#word-text{font-size:clamp(2em,9vw,4.2em);font-weight:700;letter-spacing:4px;color:#ffd700;text-shadow:0 0 24px rgba(255,215,0,.45)}
+#word-emoji{font-size:clamp(3em,10vw,5.5em);line-height:1;flex-shrink:0;filter:drop-shadow(0 4px 18px rgba(255,255,255,.2))}
+
+/* Letter boxes */
+#letter-row{display:flex;gap:clamp(5px,2vw,12px);justify-content:center;flex-wrap:wrap;flex-shrink:0}
+.lbox{width:clamp(38px,9vw,62px);height:clamp(44px,10vw,70px);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:clamp(1.3em,4vw,2.2em);font-weight:700;border:3px solid rgba(255,255,255,.22);background:rgba(255,255,255,.07);transition:all .2s;position:relative}
+.lbox.typed{background:#22543a;border-color:#4ade80;color:#4ade80}
+.lbox.current{border-color:#ffd700;background:rgba(255,215,0,.12);box-shadow:0 0 18px rgba(255,215,0,.35)}
+@keyframes pulse{0%,100%{box-shadow:0 0 18px rgba(255,215,0,.35)}50%{box-shadow:0 0 32px rgba(255,215,0,.7)}}
+.lbox.current{animation:pulse 1.1s ease-in-out infinite}
+.lbox.wrong{border-color:#ff4444!important;background:rgba(255,60,60,.2)!important;animation:lshake .3s ease!important}
+@keyframes lshake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+
+/* Encourage message */
+#msg{font-size:clamp(1em,3vw,1.35em);font-weight:700;min-height:1.8em;text-align:center;transition:opacity .3s;flex-shrink:0}
+
+/* Keyboard */
+#kb{width:100%;max-width:700px;display:flex;flex-direction:column;gap:5px;align-items:center;flex-shrink:0;margin-top:auto}
+.kb-row{display:flex;gap:4px;justify-content:center}
+.k{width:clamp(28px,8vw,48px);height:clamp(34px,8vw,50px);flex:0 0 clamp(28px,8vw,48px);border-radius:9px;background:rgba(255,255,255,.13);border:2px solid rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-size:clamp(.7em,2.5vw,1.05em);font-weight:700;cursor:pointer;transition:all .12s;-webkit-tap-highlight-color:transparent}
+.k:active{transform:scale(.9)}
+.k.lit{background:#e8540a;border-color:#ffaa80;transform:scale(1.18);box-shadow:0 0 16px #e8540a;color:#fff}
+.k.correct-flash{background:#4ade80!important;border-color:#22ff88!important;box-shadow:0 0 14px #4ade80!important}
+
+/* Mute */
+#mute-btn{background:none;border:none;color:#fff;font-size:1.3em;cursor:pointer;padding:4px 6px;border-radius:8px;flex-shrink:0}
+
+/* Confetti */
+#particles{position:fixed;inset:0;pointer-events:none;z-index:60}
+@keyframes cpop{0%{opacity:1;transform:translate(0,0) scale(1)}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(0)}}
+
+/* Celebration overlay */
+#celebrate{position:fixed;inset:0;z-index:50;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(4,4,28,.88);text-align:center;gap:10px}
+#celebrate.show{display:flex}
+#cel-emoji{font-size:clamp(4em,14vw,7em)}
+#cel-msg{font-size:clamp(1.4em,5vw,2.4em);font-weight:700;color:#ffd700;text-shadow:0 0 20px rgba(255,215,0,.6)}
+#cel-sub{font-size:clamp(.9em,3vw,1.2em);opacity:.75}
+
+/* Level up overlay */
+#levelup{position:fixed;inset:0;z-index:50;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(4,4,28,.92);text-align:center;gap:10px}
+#levelup.show{display:flex}
+
+/* Mascot */
+#mascot{position:fixed;bottom:12px;right:10px;width:68px;z-index:20}
+.mfloat #msvg{animation:mfloat 3s ease-in-out infinite}
+@keyframes mfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.mhappy #msvg{animation:mhappy .55s ease forwards}
+@keyframes mhappy{0%{transform:translateY(0) rotate(0)}35%{transform:translateY(-28px) rotate(14deg)}65%{transform:translateY(-8px) rotate(-7deg)}100%{transform:translateY(0) rotate(0)}}
+.moops #msvg{animation:moops .4s ease forwards}
+@keyframes moops{0%,100%{transform:rotate(0)}25%{transform:rotate(-20deg)}75%{transform:rotate(20deg)}}
+.mcelebrate #msvg{animation:mcelebrate 1.1s ease forwards}
+@keyframes mcelebrate{0%{transform:rotate(0) scale(1)}50%{transform:rotate(200deg) scale(1.4)}100%{transform:rotate(360deg) scale(1)}}
+
+/* Scoreboard */
+#scoreboard{background:linear-gradient(180deg,#07071f,#131352)}
+.srow{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.1);font-size:1.15em}
+.srow:last-child{border:none}
+</style>
+</head>
+<body>
+<canvas id="stars"></canvas>
+<div id="particles"></div>
+
+<!-- MASCOT -->
+<div id="mascot" class="mfloat" style="display:none">
+  <svg id="msvg" viewBox="0 0 80 122" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="40" cy="30" r="30" fill="rgba(78,193,224,.12)"/>
+    <circle cx="40" cy="30" r="26" fill="#d8eef5" stroke="#9bbcc8" stroke-width="2"/>
+    <ellipse cx="40" cy="32" rx="16" ry="12.5" fill="#1a9ecb" opacity=".88"/>
+    <ellipse cx="33" cy="25" rx="5" ry="3" fill="rgba(255,255,255,.38)" transform="rotate(-18,33,25)"/>
+    <circle cx="34" cy="31" r="3" fill="#fff"/><circle cx="46" cy="31" r="3" fill="#fff"/>
+    <circle cx="35" cy="32" r="1.7" fill="#1a2a3a"/><circle cx="47" cy="32" r="1.7" fill="#1a2a3a"/>
+    <path d="M 34 39 Q 40 45.5 46 39" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <line x1="40" y1="4" x2="40" y2="13" stroke="#9bbcc8" stroke-width="2.5"/>
+    <circle cx="40" cy="3" r="3.2" fill="#ffd700"/>
+    <rect x="17" y="53" width="46" height="47" rx="14" fill="#d8eef5" stroke="#9bbcc8" stroke-width="2"/>
+    <rect x="26" y="62" width="28" height="16" rx="5" fill="#1a9ecb" opacity=".58"/>
+    <circle cx="40" cy="70" r="4.5" fill="#ffd700" opacity=".85"/>
+    <rect x="19" y="64" width="8" height="5" rx="2" fill="#e8540a" opacity=".7"/>
+    <rect x="1" y="56" width="17" height="11" rx="5.5" fill="#d8eef5" stroke="#9bbcc8" stroke-width="1.8"/>
+    <rect x="62" y="56" width="17" height="11" rx="5.5" fill="#d8eef5" stroke="#9bbcc8" stroke-width="1.8"/>
+    <circle cx="5" cy="62" r="5" fill="#aac8d8"/><circle cx="75" cy="62" r="5" fill="#aac8d8"/>
+    <rect x="21" y="96" width="14" height="21" rx="7" fill="#d8eef5" stroke="#9bbcc8" stroke-width="1.8"/>
+    <rect x="45" y="96" width="14" height="21" rx="7" fill="#d8eef5" stroke="#9bbcc8" stroke-width="1.8"/>
+    <ellipse cx="28" cy="118" rx="9.5" ry="5" fill="#aac8d8"/>
+    <ellipse cx="52" cy="118" rx="9.5" ry="5" fill="#aac8d8"/>
+  </svg>
+</div>
+
+<!-- CELEBRATION OVERLAY -->
+<div id="celebrate">
+  <div id="cel-emoji">⭐</div>
+  <div id="cel-msg">Amazing!</div>
+  <div id="cel-sub"></div>
+</div>
+
+<!-- LEVEL UP OVERLAY -->
+<div id="levelup">
+  <div style="font-size:clamp(3em,12vw,6em)">🚀</div>
+  <div style="font-size:clamp(1.5em,5vw,2.6em);font-weight:700;color:#ffd700;text-shadow:0 0 20px rgba(255,215,0,.6)" id="lu-msg">Level Up!</div>
+  <div style="font-size:clamp(.9em,3vw,1.2em);opacity:.75;margin-bottom:16px" id="lu-sub">Now trying longer words!</div>
+  <button class="btn btn-go" onclick="dismissLevelUp()">Let's go! 🚀</button>
+</div>
+
+<!-- SETUP -->
+<div id="setup" class="screen active">
+  <div class="card">
+    <h1>🔡 Letter by Letter</h1>
+    <p style="text-align:center;opacity:.6;font-size:.88em;margin-bottom:14px">Type one letter at a time — no rush!</p>
+    <label>🧑‍🚀 Who's playing?</label>
+    <div class="prow"><span>🧑‍🚀</span><input type="text" id="pname" placeholder="Your name" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></div>
+    <label>🌌 Word Categories</label>
+    <div class="chips" id="chips">
+      <button class="chip on" data-c="animals">🐾 Animals</button>
+      <button class="chip on" data-c="space">🚀 Space</button>
+      <button class="chip on" data-c="colors">🎨 Colors</button>
+      <button class="chip on" data-c="food">🍕 Food</button>
+      <button class="chip on" data-c="trucks">🚛 Trucks</button>
+    </div>
+    <label>🎮 Mode</label>
+    <div class="chips">
+      <button class="chip on" id="mode-normal" onclick="setMode('normal')">🔤 Show the word</button>
+      <button class="chip" id="mode-emoji" onclick="setMode('emoji')">🎨 Guess from emoji</button>
+    </div>
+    <br>
+    <div style="text-align:center"><button class="btn btn-go" onclick="startGame()">Let's Type! 🔡</button></div>
+  </div>
+</div>
+
+<!-- GAME -->
+<div id="game" class="screen">
+  <div id="game-main">
+    <div id="top-bar">
+      <div id="level-badge">⭐ Level 1</div>
+      <div id="progress-dots"></div>
+      <button id="mute-btn" onclick="toggleMute()">🔊</button>
+    </div>
+    <div id="word-display">
+      <div id="word-text"></div>
+    </div>
+    <div id="word-emoji" style="display:none">🐱</div>
+    <div id="letter-row"></div>
+    <div id="msg">Find the glowing key! ✨</div>
+    <div id="kb"></div>
+  </div>
+</div>
+
+<!-- SCOREBOARD -->
+<div id="scoreboard" class="screen">
+  <div class="card" style="max-width:420px">
+    <h1 id="sb-title">🎉 Great job!</h1><br>
+    <div id="slist"></div>
+    <br>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+      <button class="btn btn-go" onclick="startGame()">🔄 Play Again</button>
+      <button class="btn btn-ghost" onclick="showScreen('setup')">⚙️ Setup</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Starfield ────────────────────────────────────────
+(()=>{
+  const c=document.getElementById('stars');
+  c.width=innerWidth;c.height=innerHeight;
+  const x=c.getContext('2d');
+  for(let i=0;i<220;i++){x.fillStyle=`rgba(255,255,255,${.15+Math.random()*.85})`;x.beginPath();x.arc(Math.random()*c.width,Math.random()*c.height,Math.random()*1.7,0,Math.PI*2);x.fill();}
+})();
+
+// ── Word banks ───────────────────────────────────────
+const WORDS={
+  animals:[
+    {w:'cat',e:'🐱'},{w:'dog',e:'🐶'},{w:'cow',e:'🐮'},{w:'pig',e:'🐷'},
+    {w:'bee',e:'🐝'},{w:'ant',e:'🐜'},{w:'owl',e:'🦉'},{w:'fox',e:'🦊'},
+    {w:'frog',e:'🐸'},{w:'duck',e:'🦆'},{w:'bear',e:'🐻'},{w:'fish',e:'🐟'},
+    {w:'lion',e:'🦁'},{w:'crab',e:'🦀'},{w:'deer',e:'🦌'},{w:'wolf',e:'🐺'},
+    {w:'panda',e:'🐼'},{w:'koala',e:'🐨'},{w:'horse',e:'🐴'},{w:'sheep',e:'🐑'},
+    {w:'tiger',e:'🐯'},{w:'eagle',e:'🦅'},{w:'snake',e:'🐍'},{w:'whale',e:'🐳'},
+    {w:'parrot',e:'🦜'},{w:'rabbit',e:'🐰'},{w:'monkey',e:'🐵'},{w:'turtle',e:'🐢'},
+    {w:'penguin',e:'🐧'},{w:'dolphin',e:'🐬'},{w:'giraffe',e:'🦒'},{w:'chicken',e:'🐔'},
+  ],
+  space:[
+    {w:'sun',e:'☀️'},{w:'moon',e:'🌙'},{w:'star',e:'⭐'},
+    {w:'mars',e:'🔴'},{w:'nova',e:'💥'},{w:'comet',e:'☄️'},
+    {w:'earth',e:'🌍'},{w:'venus',e:'🪐'},{w:'orbit',e:'🔄'},
+    {w:'saturn',e:'🪐'},{w:'rocket',e:'🚀'},{w:'galaxy',e:'🌌'},
+    {w:'asteroid',e:'🪨'},{w:'nebula',e:'🌫️'},{w:'shuttle',e:'🚀'},
+  ],
+  colors:[
+    {w:'red',e:'🔴'},{w:'blue',e:'🔵'},{w:'pink',e:'🩷'},
+    {w:'gold',e:'🌟'},{w:'teal',e:'🩵'},{w:'lime',e:'🟢'},
+    {w:'green',e:'💚'},{w:'white',e:'⬜'},{w:'black',e:'⬛'},
+    {w:'orange',e:'🟠'},{w:'purple',e:'🟣'},{w:'yellow',e:'💛'},
+    {w:'violet',e:'💜'},{w:'indigo',e:'🫐'},{w:'crimson',e:'❤️'},
+  ],
+  food:[
+    {w:'pie',e:'🥧'},{w:'egg',e:'🥚'},{w:'ham',e:'🍖'},{w:'yam',e:'🍠'},
+    {w:'cake',e:'🎂'},{w:'milk',e:'🥛'},{w:'rice',e:'🍚'},{w:'corn',e:'🌽'},
+    {w:'pizza',e:'🍕'},{w:'pasta',e:'🍝'},{w:'bread',e:'🍞'},{w:'apple',e:'🍎'},
+    {w:'taco',e:'🌮'},{w:'soup',e:'🍲'},{w:'grape',e:'🍇'},{w:'lemon',e:'🍋'},
+    {w:'carrot',e:'🥕'},{w:'cherry',e:'🍒'},{w:'cookie',e:'🍪'},{w:'banana',e:'🍌'},
+    {w:'pancake',e:'🥞'},{w:'popcorn',e:'🍿'},{w:'broccoli',e:'🥦'},
+  ],
+  trucks:[
+    {w:'mud',e:'💦'},{w:'ram',e:'🐏'},{w:'jam',e:'🎸'},
+    {w:'jeep',e:'🚙'},{w:'race',e:'🏁'},{w:'ramp',e:'📐'},
+    {w:'turbo',e:'💨'},{w:'crush',e:'💥'},{w:'boost',e:'⚡'},
+    {w:'bigfoot',e:'🦶'},{w:'monster',e:'👾'},{w:'thunder',e:'⛈️'},
+  ],
+};
+
+// Build level structure: groups of 5 words per length bracket
+function buildLevels(cats){
+  const pool=cats.flatMap(c=>WORDS[c]||[]);
+  const byLen={};
+  pool.forEach(w=>{const l=w.w.length;(byLen[l]=byLen[l]||[]).push(w);});
+  const levels=[];
+  [3,4,5,6,7,8].forEach(len=>{
+    if(byLen[len]&&byLen[len].length>=3) levels.push(shuffle([...byLen[len]]));
+  });
+  return levels;
+}
+
+// ── Audio ────────────────────────────────────────────
+let AC,muted=false;
+function initAC(){if(!AC)AC=new(window.AudioContext||window.webkitAudioContext)();}
+function toggleMute(){muted=!muted;document.getElementById('mute-btn').textContent=muted?'🔇':'🔊';}
+function tone(f,dur,type='sine',vol=.2,when=0){if(muted||!AC)return;const t=AC.currentTime+when,o=AC.createOscillator(),g=AC.createGain();o.connect(g);g.connect(AC.destination);o.type=type;o.frequency.value=f;g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(.001,t+dur);o.start(t);o.stop(t+dur+.05);}
+function sndKey(correct){
+  if(correct) tone(660,.09,'sine',.18);
+  else {tone(180,.15,'sawtooth',.12);}
+}
+function sndWord(){[523,659,784,1047].forEach((f,i)=>tone(f,.13,'sine',.2,i*.07));}
+function sndLevelUp(){[392,494,587,698,784,988].forEach((f,i)=>tone(f,.16,'sine',.22,i*.1));}
+
+// ── Helpers ──────────────────────────────────────────
+function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
+function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');document.getElementById('mascot').style.display=id==='setup'?'none':'block';}
+function setMascot(s){const m=document.getElementById('mascot');m.className='';void m.offsetWidth;m.className=s||'mfloat';if(s&&s!=='mfloat')m.addEventListener('animationend',()=>{m.className='mfloat';},{once:true});}
+
+function confetti(x,y,n=18){
+  const cols=['#ffd700','#4ade80','#60a5fa','#f472b6','#fb923c','#a78bfa'];
+  for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,d=50+Math.random()*90;const sp=document.createElement('div');sp.style.cssText=`position:fixed;width:9px;height:9px;border-radius:50%;background:${cols[i%cols.length]};left:${x}px;top:${y}px;pointer-events:none;--dx:${Math.cos(a)*d}px;--dy:${Math.sin(a)*d}px;animation:cpop .65s forwards;z-index:60`;document.getElementById('particles').appendChild(sp);setTimeout(()=>sp.remove(),750);}
+}
+function bigConfetti(){for(let i=0;i<5;i++)setTimeout(()=>confetti(Math.random()*innerWidth,Math.random()*innerHeight*.6,12),i*120);}
+
+const CHEERS=['Amazing! 🌟','Brilliant! 💥','You got it! 🎉','Superstar! ⭐','Fantastic! 🚀','Nailed it! 🎯','Woohoo! 🎊','Perfect! 💯'];
+const LVLMSGS=['Keep going! 🔥','You\'re on fire! 🔥','Incredible! 🏆'];
+function randCheer(){return CHEERS[Math.floor(Math.random()*CHEERS.length)];}
+
+// ── Game state ───────────────────────────────────────
+let playerName='',levels=[],lvlIdx=0,wordIdx=0,curWord=null,curPos=0;
+let wordsThisLevel=0,totalWords=0,wrongThisWord=false;
+const WORDS_PER_LEVEL=5;
+const KROWS=['qwertyuiop','asdfghjkl','zxcvbnm'];
+
+// ── Mode ─────────────────────────────────────────────
+let emojiMode=false;
+function setMode(m){
+  emojiMode=(m==='emoji');
+  document.getElementById('mode-normal').classList.toggle('on',!emojiMode);
+  document.getElementById('mode-emoji').classList.toggle('on', emojiMode);
+}
+
+// ── Setup ────────────────────────────────────────────
+document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>c.classList.toggle('on')));
+
+function startGame(){
+  initAC();
+  playerName=document.getElementById('pname').value.trim()||'You';
+  const cats=[...document.querySelectorAll('.chip.on')].map(c=>c.dataset.c);
+  if(!cats.length){alert('Pick at least one category!');return;}
+  levels=buildLevels(cats);
+  if(!levels.length){alert('Not enough words in those categories. Pick more!');return;}
+  lvlIdx=0;wordIdx=0;wordsThisLevel=0;totalWords=0;
+  buildKB();
+  showScreen('game');
+  loadLevel();
+}
+
+function buildKB(){
+  const kb=document.getElementById('kb');kb.innerHTML='';
+  KROWS.forEach(row=>{
+    const d=document.createElement('div');d.className='kb-row';
+    [...row].forEach(ch=>{
+      const k=document.createElement('div');k.className='k';k.id='k'+ch;k.textContent=ch.toUpperCase();
+      k.addEventListener('pointerdown',e=>{e.preventDefault();handleLetter(ch);});
+      d.appendChild(k);
+    });
+    kb.appendChild(d);
+  });
+  document.addEventListener('keydown',handleKeydown);
+}
+function handleKeydown(e){
+  if(!document.getElementById('game').classList.contains('active'))return;
+  if(e.key.length===1&&/[a-z]/i.test(e.key))handleLetter(e.key.toLowerCase());
+}
+
+function loadLevel(){
+  const lvl=levels[lvlIdx];
+  if(!lvl){endGame();return;}
+  wordIdx=0;wordsThisLevel=0;
+  renderProgressDots();
+  document.getElementById('level-badge').textContent=`⭐ Level ${lvlIdx+1}`;
+  nextWord();
+}
+
+function nextWord(){
+  const lvl=levels[lvlIdx];
+  if(wordsThisLevel>=WORDS_PER_LEVEL||wordIdx>=lvl.length){
+    // level complete
+    lvlIdx++;
+    if(lvlIdx>=levels.length){endGame();return;}
+    showLevelUp();
+    return;
+  }
+  // pick a word, avoid repeats by advancing index
+  if(wordIdx>=lvl.length)wordIdx=0;
+  curWord=lvl[wordIdx];wordIdx++;
+  curPos=0;wrongThisWord=false;
+  renderWord();
+  renderProgressDots();
+  setMsg('Find the glowing key! ✨');
+  setMascot('mfloat');
+  // Show word or emoji depending on mode
+  if(emojiMode){
+    document.getElementById('word-display').style.display='none';
+    document.getElementById('word-emoji').style.display='block';
+    document.getElementById('word-emoji').textContent=curWord.e;
+  } else {
+    document.getElementById('word-display').style.display='block';
+    document.getElementById('word-emoji').style.display='none';
+    document.getElementById('word-text').textContent=curWord.w.toUpperCase();
+  }
+  lightKey(curWord.w[0]);
+}
+
+function renderWord(){
+  const row=document.getElementById('letter-row');row.innerHTML='';
+  [...curWord.w].forEach((ch,i)=>{
+    const b=document.createElement('div');
+    b.className='lbox'+(i<curPos?' typed':i===curPos?' current':'');
+    b.id='lb'+i;
+    b.textContent=i<curPos?ch.toUpperCase():(i===curPos?'_':'');
+    row.appendChild(b);
+  });
+}
+
+function renderProgressDots(){
+  const d=document.getElementById('progress-dots');d.innerHTML='';
+  for(let i=0;i<WORDS_PER_LEVEL;i++){
+    const dot=document.createElement('div');
+    dot.className='dot'+(i<wordsThisLevel?' done':i===wordsThisLevel?' cur':'');
+    d.appendChild(dot);
+  }
+}
+
+function lightKey(ch){
+  document.querySelectorAll('.k').forEach(k=>k.classList.remove('lit'));
+  if(ch){const el=document.getElementById('k'+ch.toLowerCase());if(el)el.classList.add('lit');}
+}
+
+function flashKeyCorrect(ch){
+  const el=document.getElementById('k'+ch.toLowerCase());if(!el)return;
+  el.classList.remove('lit');el.classList.add('correct-flash');
+  setTimeout(()=>el.classList.remove('correct-flash'),280);
+}
+
+function setMsg(txt,col=''){
+  const m=document.getElementById('msg');
+  m.textContent=txt;m.style.color=col||'';
+}
+
+// ── Core input handler ───────────────────────────────
+function handleLetter(ch){
+  if(!curWord)return;
+  const expected=curWord.w[curPos];
+  if(ch===expected){
+    // Correct!
+    sndKey(true);flashKeyCorrect(ch);
+    const box=document.getElementById('lb'+curPos);
+    if(box){box.className='lbox typed';box.textContent=ch.toUpperCase();}
+    curPos++;
+    totalWords; // just tracking
+    if(curPos===curWord.w.length){
+      wordComplete();
+    } else {
+      lightKey(curWord.w[curPos]);
+      setMsg(`Keep going! ${curPos}/${curWord.w.length} ✅`,'#4ade80');
+      setMascot('mhappy');
+    }
+  } else {
+    // Wrong key
+    sndKey(false);
+    wrongThisWord=true;
+    setMascot('moops');
+    const box=document.getElementById('lb'+curPos);
+    if(box){box.className='lbox current wrong';setTimeout(()=>{if(box)box.className='lbox current';},320);}
+    setMsg(`Not quite! Try the glowing key 👇`,'#ff9090');
+  }
+}
+
+function wordComplete(){
+  sndWord();setMascot('mcelebrate');
+  wordsThisLevel++;totalWords++;
+  // Fill last box
+  renderWord();
+  // Show celebration
+  const cel=document.getElementById('celebrate');
+  const msg=randCheer();
+  document.getElementById('cel-emoji').textContent=curWord.e;
+  document.getElementById('cel-msg').textContent=msg;
+  document.getElementById('cel-sub').textContent=`You spelled "${curWord.w.toUpperCase()}"!`;
+  cel.classList.add('show');
+  bigConfetti();
+  lightKey(null);
+  setTimeout(()=>{
+    cel.classList.remove('show');
+    nextWord();
+  },1800);
+}
+
+function showLevelUp(){
+  const lvl=levels[lvlIdx];
+  const nextLen=lvl?lvl[0].w.length:0;
+  document.getElementById('lu-msg').textContent=`Level ${lvlIdx+1}! 🚀`;
+  document.getElementById('lu-sub').textContent=nextLen?`Now trying ${nextLen}-letter words!`:`You're a spelling champion!`;
+  document.getElementById('levelup').classList.add('show');
+  sndLevelUp();bigConfetti();setMascot('mcelebrate');
+}
+function dismissLevelUp(){
+  document.getElementById('levelup').classList.remove('show');
+  loadLevel();
+}
+
+function endGame(){
+  document.removeEventListener('keydown',handleKeydown);
+  showScreen('scoreboard');
+  document.getElementById('sb-title').textContent=`🏆 Amazing, ${playerName}!`;
+  document.getElementById('slist').innerHTML=`
+    <div class="srow" style="justify-content:center;flex-direction:column;align-items:center;gap:6px">
+      <div style="font-size:2em">🎉</div>
+      <div style="font-size:1.3em">You typed <strong>${totalWords}</strong> words!</div>
+      <div style="opacity:.6;font-size:.9em">Made it to Level ${lvlIdx+1} • Keep practicing!</div>
+    </div>`;
+}
+</script>
+</body>
+</html>
