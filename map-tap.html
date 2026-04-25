@@ -125,6 +125,7 @@ select option{background:#1a1a4e}
       <option value="60" selected>60 seconds</option>
       <option value="90">90 seconds</option>
       <option value="120">2 minutes</option>
+      <option value="420">7 minutes</option>
     </select>
     <br><br>
     <div style="text-align:center"><button class="btn btn-go" onclick="initGame()">🗺️ Start Exploring!</button></div>
@@ -189,6 +190,7 @@ const STATE_INFO={
   '08':{id:'CO',n:'Colorado',      reg:'West'},
   '09':{id:'CT',n:'Connecticut',   reg:'Northeast'},
   '10':{id:'DE',n:'Delaware',      reg:'Northeast'},
+  '11':{id:'DC',n:'Washington D.C.',reg:'Northeast'},
   '12':{id:'FL',n:'Florida',       reg:'South'},
   '13':{id:'GA',n:'Georgia',       reg:'South'},
   '15':{id:'HI',n:'Hawaii',        reg:'West'},
@@ -254,7 +256,7 @@ function sndTick() {tone(880,.06,'square',.08);}
 
 // ── Game state ─────────────────────────────────────────
 let players=[],scores=[],pidx=0,turnSec=60,dk='medium';
-let pool=[],queue=[],cur=null,att=0,solved=0;
+let pool=[],queue=[],retryQueue=[],cur=null,att=0,solved=0;
 let timerID=null,hintTimer=null,tLeft=0,gr=false,clickLock=false;
 let candidateIds=[]; // currently glowing candidate state abbrs
 let usData=null;
@@ -265,15 +267,23 @@ function setMascot(s){const m=document.getElementById('mascot');m.className='';v
 function addP(){const l=document.getElementById('plist');if(l.children.length>=4)return;const n=l.children.length+1;const d=document.createElement('div');d.className='prow';d.innerHTML=`<span>🧑‍🚀</span><input type="text" placeholder="Player ${n}" class="pname" autocomplete="off" autocorrect="off" autocapitalize="off">`;l.appendChild(d);}
 function remP(){const l=document.getElementById('plist');if(l.children.length>1)l.removeChild(l.lastChild);}
 function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
+function fmtTime(s){const c=Math.max(0,Math.ceil(s));return c>=60?`${Math.floor(c/60)}:${(c%60).toString().padStart(2,'0')}`:c;}
 function confetti(x,y){const c=['#ffd700','#4ade80','#60a5fa','#f472b6','#fb923c'];for(let i=0;i<16;i++){const a=Math.random()*Math.PI*2,d=45+Math.random()*75;const sp=document.createElement('div');sp.style.cssText=`position:fixed;width:8px;height:8px;border-radius:50%;background:${c[i%5]};left:${x}px;top:${y}px;pointer-events:none;--dx:${Math.cos(a)*d}px;--dy:${Math.sin(a)*d}px;animation:cpop .6s forwards;z-index:60`;document.getElementById('particles').appendChild(sp);setTimeout(()=>sp.remove(),700);}}
 
 function getFips(abbr){return Object.entries(STATE_INFO).find(([,v])=>v.id===abbr)?.[0];}
 function getEl(abbr){const f=getFips(abbr);return f?document.getElementById('s-'+f):null;}
+function getEls(abbr){
+  const f=getFips(abbr); if(!f)return [];
+  return [document.getElementById('s-'+f),document.getElementById('si-'+f)].filter(Boolean);
+}
 
 function setClass(abbr,cls){
-  const el=getEl(abbr); if(!el)return;
-  el.className.baseVal='state-path '+(cls||'');
-  if(!cls){const f=getFips(abbr);el.setAttribute('fill',REG_COL[STATE_INFO[f].reg]);}
+  const els=getEls(abbr); if(!els.length)return;
+  const f=getFips(abbr); const baseFill=REG_COL[STATE_INFO[f].reg];
+  els.forEach(el=>{
+    el.className.baseVal='state-path '+(cls||'');
+    if(!cls)el.setAttribute('fill',baseFill);
+  });
 }
 function flashClass(abbr,cls,dur){
   setClass(abbr,cls);
@@ -322,9 +332,32 @@ async function buildMap(){
   renderMap(); return true;
 }
 
+function attachStateHandlers(sel){
+  sel
+    .on('mousemove',(e,d)=>{
+      if(dk!=='easy')return;
+      const info=STATE_INFO[String(d.id).padStart(2,'0')];
+      if(!info)return;
+      showTooltip(info.n,e.clientX,e.clientY,0);
+    })
+    .on('mouseleave',()=>{ if(dk==='easy')hideTooltip(); })
+    .on('click',(e,d)=>{
+      const info=STATE_INFO[String(d.id).padStart(2,'0')];
+      if(info)handleClick(info,e.clientX,e.clientY);
+    });
+}
+
+function attachDCHandlers(sel){
+  sel
+    .on('mousemove',e=>{ if(dk==='easy')showTooltip('Washington D.C.',e.clientX,e.clientY,0); })
+    .on('mouseleave',()=>{ if(dk==='easy')hideTooltip(); })
+    .on('click',e=>handleClick(STATE_INFO['11'],e.clientX,e.clientY));
+}
+
 function renderMap(){
   const wrap=document.getElementById('map-wrap');
   wrap.innerHTML='';
+  wrap.style.position='relative';
   const svg=d3.select(wrap).append('svg')
     .attr('viewBox','0 0 975 610')
     .attr('preserveAspectRatio','xMidYMid meet');
@@ -333,31 +366,17 @@ function renderMap(){
   const features=topojson.feature(usData,usData.objects.states).features;
   const mesh=topojson.mesh(usData,usData.objects.states,(a,b)=>a!==b);
 
-  // centroid lookup for label placement
-  const centroid=d3.geoPath().projection(proj).centroid.bind(d3.geoPath().projection(proj));
-
   const g=svg.append('g');
 
-  // State fills
+  // State fills (DC handled separately as an enlarged circle)
   g.selectAll('path.state-path')
-    .data(features)
+    .data(features.filter(d=>String(d.id).padStart(2,'0')!=='11'))
     .join('path')
     .attr('class','state-path')
     .attr('id',d=>'s-'+String(d.id).padStart(2,'0'))
     .attr('d',path)
     .attr('fill',d=>{const info=STATE_INFO[String(d.id).padStart(2,'0')];return info?REG_COL[info.reg]:'#1a2a5a';})
-    .on('mousemove',(e,d)=>{
-      // Easy mode: always show tooltip on hover
-      if(dk!=='easy')return;
-      const info=STATE_INFO[String(d.id).padStart(2,'0')];
-      if(!info)return;
-      showTooltip(info.n,e.clientX,e.clientY,0); // dur=0 = persistent while hovering
-    })
-    .on('mouseleave',()=>{ if(dk==='easy')hideTooltip(); })
-    .on('click',(e,d)=>{
-      const info=STATE_INFO[String(d.id).padStart(2,'0')];
-      if(info)handleClick(info,e.clientX,e.clientY);
-    });
+    .call(attachStateHandlers);
 
   // State borders
   g.append('path')
@@ -366,6 +385,21 @@ function renderMap(){
     .attr('stroke','rgba(100,140,200,.35)')
     .attr('stroke-width','0.6')
     .attr('d',path);
+
+  // DC: rendered as enlarged circle so it's actually clickable
+  const dcFeat=features.find(d=>String(d.id).padStart(2,'0')==='11');
+  if(dcFeat){
+    const c=path.centroid(dcFeat);
+    if(c&&!isNaN(c[0])){
+      svg.append('circle')
+        .attr('class','state-path')
+        .attr('id','s-11')
+        .attr('cx',c[0]).attr('cy',c[1]).attr('r',6)
+        .attr('fill',REG_COL.Northeast)
+        .attr('stroke','#fff').attr('stroke-width',1)
+        .call(attachDCHandlers);
+    }
+  }
 
   // Easy-mode labels (always visible abbreviations)
   if(dk==='easy'){
@@ -382,8 +416,85 @@ function renderMap(){
       .attr('font-weight','700')
       .attr('font-family',"'Comic Sans MS',cursive")
       .attr('fill','rgba(255,255,255,.75)')
-      .attr('pointer-events','none')
       .text(d=>STATE_INFO[String(d.id).padStart(2,'0')]?.id||'');
+  }
+
+  // ── Northeast zoom inset ───────────────────────────────
+  // Small NE states are nearly impossible to click on the main map; this inset
+  // shows them enlarged with their own clickable shapes.
+  const insetAllIds=['ME','NH','VT','MA','RI','CT','NY','NJ','DE','MD','DC','PA'];
+  const insetTinyIds=['NH','VT','MA','RI','CT','NJ','DE','MD','DC'];
+  const insetFeatures=features.filter(d=>{
+    const info=STATE_INFO[String(d.id).padStart(2,'0')];
+    return info&&insetAllIds.includes(info.id);
+  });
+  const tinyFeatures=features.filter(d=>{
+    const info=STATE_INFO[String(d.id).padStart(2,'0')];
+    return info&&insetTinyIds.includes(info.id);
+  });
+  let bx0=Infinity,by0=Infinity,bx1=-Infinity,by1=-Infinity;
+  tinyFeatures.forEach(f=>{
+    const b=path.bounds(f);
+    if(isFinite(b[0][0])){
+      bx0=Math.min(bx0,b[0][0]); by0=Math.min(by0,b[0][1]);
+      bx1=Math.max(bx1,b[1][0]); by1=Math.max(by1,b[1][1]);
+    }
+  });
+  if(isFinite(bx0)){
+    const pad=8;
+    const vbX=bx0-pad, vbY=by0-pad-4, vbW=bx1-bx0+pad*2, vbH=by1-by0+pad*2+4;
+    const inset=d3.select(wrap).append('svg')
+      .attr('id','ne-inset')
+      .attr('viewBox',`${vbX} ${vbY} ${vbW} ${vbH}`)
+      .attr('preserveAspectRatio','xMidYMid meet')
+      .style('position','absolute')
+      .style('top','8px').style('left','8px')
+      .style('width','clamp(170px,22vw,240px)')
+      .style('height','clamp(170px,22vw,240px)')
+      .style('background','rgba(7,7,31,.92)')
+      .style('border','2px solid rgba(255,215,0,.55)')
+      .style('border-radius','12px')
+      .style('box-shadow','0 4px 18px rgba(0,0,0,.5)');
+
+    const ig=inset.append('g');
+    ig.selectAll('path.state-path')
+      .data(insetFeatures.filter(d=>String(d.id).padStart(2,'0')!=='11'))
+      .join('path')
+      .attr('class','state-path')
+      .attr('id',d=>'si-'+String(d.id).padStart(2,'0'))
+      .attr('d',path)
+      .attr('fill',d=>{const info=STATE_INFO[String(d.id).padStart(2,'0')];return info?REG_COL[info.reg]:'#1a2a5a';})
+      .call(attachStateHandlers);
+
+    ig.append('path')
+      .datum(mesh)
+      .attr('fill','none')
+      .attr('stroke','rgba(100,140,200,.55)')
+      .attr('stroke-width','0.5')
+      .attr('d',path);
+
+    if(dcFeat){
+      const c=path.centroid(dcFeat);
+      if(c&&!isNaN(c[0])){
+        inset.append('circle')
+          .attr('class','state-path')
+          .attr('id','si-11')
+          .attr('cx',c[0]).attr('cy',c[1]).attr('r',3.2)
+          .attr('fill',REG_COL.Northeast)
+          .attr('stroke','#fff').attr('stroke-width',0.6)
+          .call(attachDCHandlers);
+      }
+    }
+
+    inset.append('text')
+      .attr('x',vbX+vbW/2).attr('y',vbY+5.5)
+      .attr('text-anchor','middle')
+      .attr('font-size',Math.max(4,vbW*0.06))
+      .attr('font-weight','700')
+      .attr('font-family',"'Comic Sans MS',cursive")
+      .attr('fill','rgba(255,215,0,.85)')
+      .attr('pointer-events','none')
+      .text('🔍 Northeast Zoom');
   }
 }
 
@@ -423,11 +534,12 @@ function doTrans(){
 
 function startTurn(){
   showScreen('game'); sndStart();
-  pool=buildPool(); queue=shuffle([...pool]);
+  pool=buildPool(); queue=shuffle([...pool]); retryQueue=[];
   solved=0; gr=true; clickLock=false;
   document.getElementById('hud-name').textContent=`🧑‍🚀 ${players[pidx]}`;
   document.getElementById('hud-score').textContent=`⭐ 0`;
   tLeft=turnSec; document.getElementById('tbar').style.width='100%';
+  document.getElementById('hud-time').textContent=`⏱ ${fmtTime(tLeft)}`;
   setMascot('mfloat');
   Object.values(STATE_INFO).forEach(s=>setClass(s.id,''));
   nextState();
@@ -437,7 +549,7 @@ function startTurn(){
     if(!gr)return;
     tLeft=Math.max(0,turnSec-(Date.now()-t0)/1000);
     const c=Math.ceil(tLeft);
-    document.getElementById('hud-time').textContent=`⏱ ${c}`;
+    document.getElementById('hud-time').textContent=`⏱ ${fmtTime(tLeft)}`;
     const pct=tLeft/turnSec;
     document.getElementById('tbar').style.width=(pct*100)+'%';
     document.getElementById('tbar').style.background=pct>.3?'#4ade80':'#e8540a';
@@ -456,12 +568,20 @@ function endTurn(){
 function nextState(){
   if(!gr)return;
   clearCandidates(); hideTooltip();
-  if(!queue.length) queue=shuffle([...pool]);
+  if(!queue.length){
+    if(retryQueue.length){
+      // Replay states the player got wrong, no repeats of correct ones
+      queue=shuffle(retryQueue); retryQueue=[];
+    } else {
+      // All states answered — finish the turn early
+      endTurn(); return;
+    }
+  }
   cur=queue.pop(); att=0; clickLock=false;
   document.getElementById('target-name').textContent=cur.n;
   document.getElementById('hint-text').textContent='';
   document.getElementById('hearts').textContent='❤️❤️❤️';
-  document.getElementById('found-ct').textContent=`✅ ${solved} found`;
+  document.getElementById('found-ct').textContent=`✅ ${solved} / ${pool.length} found`;
 
   // Schedule candidate hint (not on easy — labels already shown)
   if(dk!=='easy'&&CANDIDATE_CT[dk]>0){
@@ -503,8 +623,9 @@ function handleClick(info,cx,cy){
     if(att>=3){
       clickLock=true; clearCandidates();
       setClass(cur.id,'revealed');
-      document.getElementById('hint-text').textContent=`It was ${cur.n}! 🔍`;
-      setTimeout(()=>{setClass(cur.id,'solved');nextState();},1600);
+      document.getElementById('hint-text').textContent=`It was ${cur.n}! 🔍 We'll come back to it.`;
+      retryQueue.push(cur);
+      setTimeout(()=>{setClass(cur.id,'');nextState();},1600);
     }
   }
 }
