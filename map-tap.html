@@ -125,6 +125,7 @@ select option{background:#1a1a4e}
       <option value="60" selected>60 seconds</option>
       <option value="90">90 seconds</option>
       <option value="120">2 minutes</option>
+      <option value="180">3 minutes</option>
       <option value="420">7 minutes</option>
     </select>
     <br><br>
@@ -419,46 +420,46 @@ function renderMap(){
       .text(d=>STATE_INFO[String(d.id).padStart(2,'0')]?.id||'');
   }
 
-  // ── Northeast zoom inset ───────────────────────────────
-  // Small NE states are nearly impossible to click on the main map; this inset
-  // shows them enlarged with their own clickable shapes.
-  const insetAllIds=['ME','NH','VT','MA','RI','CT','NY','NJ','DE','MD','DC','PA'];
-  const insetTinyIds=['NH','VT','MA','RI','CT','NJ','DE','MD','DC'];
-  const insetFeatures=features.filter(d=>{
-    const info=STATE_INFO[String(d.id).padStart(2,'0')];
-    return info&&insetAllIds.includes(info.id);
-  });
-  const tinyFeatures=features.filter(d=>{
-    const info=STATE_INFO[String(d.id).padStart(2,'0')];
-    return info&&insetTinyIds.includes(info.id);
-  });
-  let bx0=Infinity,by0=Infinity,bx1=-Infinity,by1=-Infinity;
-  tinyFeatures.forEach(f=>{
-    const b=path.bounds(f);
-    if(isFinite(b[0][0])){
-      bx0=Math.min(bx0,b[0][0]); by0=Math.min(by0,b[0][1]);
-      bx1=Math.max(bx1,b[1][0]); by1=Math.max(by1,b[1][1]);
-    }
-  });
-  if(isFinite(bx0)){
-    const pad=8;
+  // ── Zoom insets ────────────────────────────────────────
+  // Small states are hard to click on the main map; render them enlarged in
+  // corner insets that share the same id space (si-*) so setClass updates both.
+  function makeInset(opts){
+    const showIds=opts.showIds, frameIds=opts.frameIds||showIds;
+    const showFeatures=features.filter(d=>{
+      const info=STATE_INFO[String(d.id).padStart(2,'0')];
+      return info&&showIds.includes(info.id);
+    });
+    const frameFeatures=features.filter(d=>{
+      const info=STATE_INFO[String(d.id).padStart(2,'0')];
+      return info&&frameIds.includes(info.id);
+    });
+    let bx0=Infinity,by0=Infinity,bx1=-Infinity,by1=-Infinity;
+    frameFeatures.forEach(f=>{
+      const b=path.bounds(f);
+      if(isFinite(b[0][0])){
+        bx0=Math.min(bx0,b[0][0]); by0=Math.min(by0,b[0][1]);
+        bx1=Math.max(bx1,b[1][0]); by1=Math.max(by1,b[1][1]);
+      }
+    });
+    if(!isFinite(bx0))return;
+    const pad=opts.pad??8;
     const vbX=bx0-pad, vbY=by0-pad-4, vbW=bx1-bx0+pad*2, vbH=by1-by0+pad*2+4;
     const inset=d3.select(wrap).append('svg')
-      .attr('id','ne-inset')
+      .attr('id',opts.id)
       .attr('viewBox',`${vbX} ${vbY} ${vbW} ${vbH}`)
       .attr('preserveAspectRatio','xMidYMid meet')
       .style('position','absolute')
-      .style('top','8px').style('left','8px')
       .style('width','clamp(170px,22vw,240px)')
       .style('height','clamp(170px,22vw,240px)')
       .style('background','rgba(7,7,31,.92)')
       .style('border','2px solid rgba(255,215,0,.55)')
       .style('border-radius','12px')
       .style('box-shadow','0 4px 18px rgba(0,0,0,.5)');
+    Object.entries(opts.pos||{}).forEach(([k,v])=>inset.style(k,v));
 
     const ig=inset.append('g');
     ig.selectAll('path.state-path')
-      .data(insetFeatures.filter(d=>String(d.id).padStart(2,'0')!=='11'))
+      .data(showFeatures.filter(d=>String(d.id).padStart(2,'0')!=='11'))
       .join('path')
       .attr('class','state-path')
       .attr('id',d=>'si-'+String(d.id).padStart(2,'0'))
@@ -473,7 +474,7 @@ function renderMap(){
       .attr('stroke-width','0.5')
       .attr('d',path);
 
-    if(dcFeat){
+    if(showIds.includes('DC')&&dcFeat){
       const c=path.centroid(dcFeat);
       if(c&&!isNaN(c[0])){
         inset.append('circle')
@@ -494,8 +495,24 @@ function renderMap(){
       .attr('font-family',"'Comic Sans MS',cursive")
       .attr('fill','rgba(255,215,0,.85)')
       .attr('pointer-events','none')
-      .text('🔍 Northeast Zoom');
+      .text(opts.label);
   }
+
+  makeInset({
+    id:'ne-inset',
+    pos:{top:'8px',left:'8px'},
+    showIds:['ME','NH','VT','MA','RI','CT','NY','NJ','DE','MD','DC','PA'],
+    frameIds:['NH','VT','MA','RI','CT','NJ','DE','MD','DC'],
+    label:'🔍 Northeast Zoom'
+  });
+
+  makeInset({
+    id:'hi-inset',
+    pos:{top:'8px',right:'8px'},
+    showIds:['HI'],
+    label:'🔍 Hawaii Zoom',
+    pad:4
+  });
 }
 
 // ── Game flow ──────────────────────────────────────────

@@ -156,6 +156,7 @@ label{display:block;margin:10px 0 4px;font-size:.86em;opacity:.75}
       <button class="chip on" data-c="colors">🎨 Colors</button>
       <button class="chip on" data-c="food">🍕 Food</button>
       <button class="chip on" data-c="trucks">🚛 Trucks</button>
+      <button class="chip on" data-c="states">🗺️ US States</button>
     </div>
     <label>🎮 Mode</label>
     <div class="chips">
@@ -247,16 +248,36 @@ const WORDS={
     {w:'turbo',e:'💨'},{w:'crush',e:'💥'},{w:'boost',e:'⚡'},
     {w:'bigfoot',e:'🦶'},{w:'monster',e:'👾'},{w:'thunder',e:'⛈️'},
   ],
+  // Single-word US states (multi-word ones like "New York" aren't typeable here)
+  states:[
+    {w:'iowa',e:'🌽'},{w:'ohio',e:'🌰'},{w:'utah',e:'🏔️'},
+    {w:'idaho',e:'🥔'},{w:'maine',e:'🦞'},{w:'texas',e:'🤠'},
+    {w:'alaska',e:'🐻‍❄️'},{w:'hawaii',e:'🌺'},{w:'kansas',e:'🌪️'},
+    {w:'nevada',e:'🎰'},{w:'oregon',e:'🌲'},
+    {w:'alabama',e:'🏈'},{w:'arizona',e:'🌵'},{w:'florida',e:'🐊'},
+    {w:'georgia',e:'🍑'},{w:'indiana',e:'🏎️'},{w:'montana',e:'🐂'},
+    {w:'vermont',e:'🍁'},{w:'wyoming',e:'🦬'},
+    {w:'arkansas',e:'💎'},{w:'colorado',e:'⛰️'},{w:'delaware',e:'🦀'},
+    {w:'illinois',e:'🌆'},{w:'kentucky',e:'🐎'},{w:'maryland',e:'🦞'},
+    {w:'michigan',e:'🚗'},{w:'missouri',e:'⛲'},{w:'nebraska',e:'🌾'},
+    {w:'oklahoma',e:'🛢️'},{w:'virginia',e:'🥜'},
+    {w:'louisiana',e:'🎷'},{w:'minnesota',e:'🦌'},{w:'tennessee',e:'🎸'},
+    {w:'wisconsin',e:'🧀'},
+    {w:'california',e:'🌴'},{w:'washington',e:'🍎'},
+    {w:'connecticut',e:'🍂'},{w:'mississippi',e:'🌊'},
+    {w:'pennsylvania',e:'🔔'},
+    {w:'massachusetts',e:'🦃'},
+  ],
 };
 
-// Build level structure: groups of 5 words per length bracket
+// Build level structure: groups of 5 words per length bracket, ascending
 function buildLevels(cats){
   const pool=cats.flatMap(c=>WORDS[c]||[]);
   const byLen={};
   pool.forEach(w=>{const l=w.w.length;(byLen[l]=byLen[l]||[]).push(w);});
   const levels=[];
-  [3,4,5,6,7,8].forEach(len=>{
-    if(byLen[len]&&byLen[len].length>=3) levels.push(shuffle([...byLen[len]]));
+  Object.keys(byLen).map(Number).sort((a,b)=>a-b).forEach(len=>{
+    if(byLen[len].length>=3) levels.push(shuffle([...byLen[len]]));
   });
   return levels;
 }
@@ -323,7 +344,7 @@ function buildKB(){
   KROWS.forEach(row=>{
     const d=document.createElement('div');d.className='kb-row';
     [...row].forEach(ch=>{
-      const k=document.createElement('div');k.className='k';k.id='k'+ch;k.textContent=ch.toUpperCase();
+      const k=document.createElement('div');k.className='k';k.id='k-'+ch;k.textContent=ch.toUpperCase();
       k.addEventListener('pointerdown',e=>{e.preventDefault();handleLetter(ch);});
       d.appendChild(k);
     });
@@ -397,11 +418,11 @@ function renderProgressDots(){
 
 function lightKey(ch){
   document.querySelectorAll('.k').forEach(k=>k.classList.remove('lit'));
-  if(ch){const el=document.getElementById('k'+ch.toLowerCase());if(el)el.classList.add('lit');}
+  if(ch){const el=document.getElementById('k-'+ch.toLowerCase());if(el)el.classList.add('lit');}
 }
 
 function flashKeyCorrect(ch){
-  const el=document.getElementById('k'+ch.toLowerCase());if(!el)return;
+  const el=document.getElementById('k-'+ch.toLowerCase());if(!el)return;
   el.classList.remove('lit');el.classList.add('correct-flash');
   setTimeout(()=>el.classList.remove('correct-flash'),280);
 }
