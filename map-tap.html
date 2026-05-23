@@ -121,6 +121,13 @@ select option{background:#1a1a4e}
       <option value="hard">🦅 Hard — all 50 states</option>
       <option value="expert">🌎 Expert — 50 states + territories</option>
     </select>
+    <label>🔀 State Order</label>
+    <select id="order">
+      <option value="random" selected>🎲 Random (shuffled)</option>
+      <option value="az">🔤 Alphabetical (A → Z)</option>
+      <option value="we">🧭 West → East</option>
+      <option value="ns">🧭 North → South</option>
+    </select>
     <label>⏱ Time per Turn</label>
     <select id="ttm">
       <option value="60" selected>60 seconds</option>
@@ -270,11 +277,12 @@ function sndEnd()  {[784,659,523,392,262].forEach((f,i)=>tone(f,.2,'sine',.19,i*
 function sndTick() {tone(880,.06,'square',.08);}
 
 // ── Game state ─────────────────────────────────────────
-let players=[],scores=[],pidx=0,turnSec=60,dk='medium';
+let players=[],scores=[],pidx=0,turnSec=60,dk='medium',ord='random';
 let pool=[],queue=[],retryQueue=[],cur=null,att=0,solved=0;
 let timerID=null,hintTimer=null,tLeft=0,gr=false,clickLock=false;
 let candidateIds=[]; // currently glowing candidate state abbrs
 let usData=null;
+let CENTROIDS=null; // abbr → [lon,lat], lazily built for deterministic ordering
 
 // ── Helpers ────────────────────────────────────────────
 function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');document.getElementById('mascot').style.display=id==='setup'?'none':'block';}
@@ -594,6 +602,7 @@ async function initGame(same=false){
   scores=players.map(()=>0); pidx=0;
   turnSec=parseInt(document.getElementById('ttm').value);
   dk=document.getElementById('diff').value;
+  ord=document.getElementById('order').value;
   showScreen('transition');
   document.getElementById('tc').innerHTML=`<div style="font-size:3em">🌍</div><p style="margin-top:12px;opacity:.7">Loading map…</p>`;
   const ok=await buildMap();
@@ -607,6 +616,33 @@ function buildPool(){
   if(dk==='medium') return all.filter(s=>!CONT_SKIP.has(s.id)&&!TERRITORY_IDS.has(s.id));
   if(dk==='hard')   return all.filter(s=>!TERRITORY_IDS.has(s.id)); // all 50 states + DC
   return all; // expert: 50 states + DC + territories
+}
+
+// Geographic centroids (abbr → [lon,lat]) for deterministic ordering, built once
+// from the loaded map + territory geometry.
+function buildCentroids(){
+  CENTROIDS={};
+  if(usData){
+    topojson.feature(usData,usData.objects.states).features.forEach(f=>{
+      const info=STATE_INFO[String(f.id).padStart(2,'0')];
+      if(info)CENTROIDS[info.id]=d3.geoCentroid(f);
+    });
+  }
+  TERRITORY_GEO.features.forEach(f=>{
+    const info=STATE_INFO[String(f.id).padStart(2,'0')];
+    if(info)CENTROIDS[info.id]=d3.geoCentroid(f);
+  });
+}
+// Return a copy of arr in the chosen PLAY order (first element played first).
+function orderPool(arr){
+  if(ord==='random')return shuffle(arr);
+  const a=[...arr];
+  if(ord==='az')return a.sort((x,y)=>x.n.localeCompare(y.n));
+  if(!CENTROIDS)buildCentroids();
+  const c=id=>CENTROIDS[id]||[0,0];
+  if(ord==='we')return a.sort((x,y)=>c(x.id)[0]-c(y.id)[0]); // ascending longitude → west to east
+  if(ord==='ns')return a.sort((x,y)=>c(y.id)[1]-c(x.id)[1]); // descending latitude → north to south
+  return a;
 }
 
 function doTrans(){
@@ -624,7 +660,7 @@ function doTrans(){
 
 function startTurn(){
   showScreen('game'); sndStart();
-  pool=buildPool(); queue=shuffle([...pool]); retryQueue=[];
+  pool=buildPool(); queue=orderPool(pool).reverse(); retryQueue=[]; // pop() draws from end → plays in chosen order
   solved=0; gr=true; clickLock=false;
   document.getElementById('hud-name').textContent=`🧑‍🚀 ${players[pidx]}`;
   document.getElementById('hud-score').textContent=`⭐ 0`;
@@ -660,8 +696,8 @@ function nextState(){
   clearCandidates(); hideTooltip();
   if(!queue.length){
     if(retryQueue.length){
-      // Replay states the player got wrong, no repeats of correct ones
-      queue=shuffle(retryQueue); retryQueue=[];
+      // Replay states the player got wrong, in the chosen order, no repeats
+      queue=orderPool(retryQueue).reverse(); retryQueue=[];
     } else {
       // All states answered — finish the turn early
       endTurn(); return;
