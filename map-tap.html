@@ -119,6 +119,7 @@ select option{background:#1a1a4e}
       <option value="easy">🐣 Easy — 20 famous states + name labels</option>
       <option value="medium" selected>🐥 Medium — all 48 continental</option>
       <option value="hard">🦅 Hard — all 50 states</option>
+      <option value="expert">🌎 Expert — 50 states + territories</option>
     </select>
     <label>⏱ Time per Turn</label>
     <select id="ttm">
@@ -234,14 +235,26 @@ const STATE_INFO={
   '54':{id:'WV',n:'West Virginia', reg:'South'},
   '55':{id:'WI',n:'Wisconsin',     reg:'Midwest'},
   '56':{id:'WY',n:'Wyoming',       reg:'West'},
+  // ── U.S. territories (Expert mode only; rendered in their own zoom insets) ──
+  '60':{id:'AS',n:'American Samoa',             reg:'Pacific'},
+  '66':{id:'GU',n:'Guam',                       reg:'Pacific'},
+  '69':{id:'MP',n:'Northern Mariana Islands',   reg:'Pacific'},
+  '72':{id:'PR',n:'Puerto Rico',                reg:'Caribbean'},
+  '74':{id:'UM',n:'U.S. Minor Outlying Islands',reg:'Pacific'},
+  '78':{id:'VI',n:'U.S. Virgin Islands',        reg:'Caribbean'},
 };
-const REG_COL={West:'#0e3060',Midwest:'#0a3a20',South:'#3a1a05',Northeast:'#2a0a4a'};
+const REG_COL={West:'#0e3060',Midwest:'#0a3a20',South:'#3a1a05',Northeast:'#2a0a4a',Caribbean:'#0a3a3a',Pacific:'#3a0a2a'};
 const EASY_IDS=new Set(['TX','CA','FL','NY','OH','MI','IL','WA','OR','CO','AZ','GA','NC','VA','MN','WI','MO','TN','AL','LA','PA']);
 const CONT_SKIP=new Set(['AK','HI']);
+const TERRITORY_IDS=new Set(['AS','GU','MP','PR','UM','VI']);
+// Inline simplified geometry for the territories (geoAlbersUsa can't project them,
+// and the CDN base map contains only the 50 states + DC). Each feature's .id is its
+// FIPS code so attachStateHandlers works unchanged. UM is one MultiPoint → one <path>.
+const TERRITORY_GEO={type:'FeatureCollection',features:[{"type":"Feature","id":"60","geometry":{"type":"MultiPolygon","coordinates":[[[[-170.693,-14.315],[-170.755,-14.367],[-170.831,-14.319],[-170.789,-14.295],[-170.722,-14.289],[-170.698,-14.261],[-170.62,-14.255],[-170.693,-14.315]]],[[[-169.464,-14.223],[-169.447,-14.256],[-169.523,-14.271],[-169.543,-14.237],[-169.464,-14.223]]]]}},{"type":"Feature","id":"66","geometry":{"type":"Polygon","coordinates":[[[144.886,13.64],[144.952,13.599],[144.907,13.517],[144.808,13.446],[144.769,13.379],[144.76,13.286],[144.736,13.249],[144.681,13.247],[144.654,13.287],[144.643,13.366],[144.654,13.439],[144.783,13.517],[144.811,13.554],[144.839,13.633],[144.886,13.64]]]}},{"type":"Feature","id":"69","geometry":{"type":"MultiPolygon","coordinates":[[[[145.206,14.181],[145.28,14.203],[145.282,14.161],[145.21,14.111],[145.131,14.147],[145.206,14.181]]],[[[145.647,15.072],[145.668,14.983],[145.646,14.93],[145.606,14.928],[145.578,15.017],[145.611,15.067],[145.647,15.072]]],[[[145.788,15.267],[145.793,15.232],[145.739,15.137],[145.753,15.096],[145.686,15.102],[145.698,15.203],[145.736,15.243],[145.788,15.267]]]]}},{"type":"Feature","id":"72","geometry":{"type":"MultiPolygon","coordinates":[[[[-67.856,18.115],[-67.873,18.053],[-67.931,18.081],[-67.92,18.114],[-67.856,18.115]]],[[[-65.348,18.115],[-65.469,18.094],[-65.54,18.124],[-65.479,18.157],[-65.399,18.169],[-65.348,18.115]]],[[[-65.629,18.279],[-65.592,18.231],[-65.738,18.183],[-65.79,18.114],[-65.83,18.027],[-65.939,17.971],[-66.005,17.978],[-66.105,17.959],[-66.163,17.929],[-66.293,17.946],[-66.328,17.972],[-66.416,17.95],[-66.469,17.993],[-66.593,17.964],[-66.766,17.984],[-66.818,17.959],[-66.924,17.95],[-67.067,17.973],[-67.112,17.95],[-67.215,17.966],[-67.186,18.07],[-67.184,18.14],[-67.152,18.203],[-67.197,18.291],[-67.237,18.3],[-67.271,18.362],[-67.159,18.421],[-67.17,18.486],[-67.102,18.523],[-66.907,18.485],[-66.803,18.498],[-66.752,18.484],[-66.641,18.496],[-66.467,18.475],[-66.382,18.491],[-66.304,18.469],[-66.258,18.482],[-66.118,18.443],[-66.122,18.473],[-66.012,18.444],[-65.989,18.463],[-65.848,18.438],[-65.772,18.415],[-65.663,18.366],[-65.621,18.382],[-65.629,18.279]]]]}},{"type":"Feature","id":"78","geometry":{"type":"MultiPolygon","coordinates":[[[[-64.559,17.752],[-64.671,17.717],[-64.876,17.689],[-64.888,17.755],[-64.772,17.793],[-64.69,17.745],[-64.667,17.763],[-64.592,17.768],[-64.559,17.752]]],[[[-64.872,18.315],[-64.945,18.337],[-64.929,18.38],[-64.855,18.34],[-64.872,18.315]]]]}},{"type":"Feature","id":"74","geometry":{"type":"MultiPoint","coordinates":[[-176.477,0.193],[-176.617,0.807],[-160.011,-0.374],[-169.534,16.728],[-162.417,6.383],[-177.38,28.21],[-162.083,5.883],[166.65,19.28],[-75.02,18.4]]}}]};
 const MEDALS=['🥇','🥈','🥉','🏅'];
 const PTS=[100,60,30];
 // Candidate counts per difficulty (includes correct state)
-const CANDIDATE_CT={easy:0,medium:5,hard:4}; // easy: labels shown instead
+const CANDIDATE_CT={easy:0,medium:5,hard:4,expert:4}; // easy: labels shown instead
 const HINT_DELAY=5000; // ms before candidates light up
 
 // ── Audio ─────────────────────────────────────────────
@@ -369,9 +382,16 @@ function renderMap(){
 
   const g=svg.append('g');
 
-  // State fills (DC handled separately as an enlarged circle)
+  // State fills (DC handled separately as an enlarged circle; territories are in
+  // us-atlas too but geoAlbersUsa drops them — render them only in their own insets,
+  // otherwise they'd create empty duplicate s-* ids that shadow the inset shapes)
   g.selectAll('path.state-path')
-    .data(features.filter(d=>String(d.id).padStart(2,'0')!=='11'))
+    .data(features.filter(d=>{
+      const f=String(d.id).padStart(2,'0');
+      if(f==='11')return false;
+      const info=STATE_INFO[f];
+      return !(info&&TERRITORY_IDS.has(info.id));
+    }))
     .join('path')
     .attr('class','state-path')
     .attr('id',d=>'s-'+String(d.id).padStart(2,'0'))
@@ -423,58 +443,86 @@ function renderMap(){
   // ── Zoom insets ────────────────────────────────────────
   // Small states are hard to click on the main map; render them enlarged in
   // corner insets that share the same id space (si-*) so setClass updates both.
+  // Two modes:
+  //  • state mode (opts.showIds): reuses the global geoAlbersUsa `path`; ids si-*.
+  //  • territory mode (opts.geoFeatures): builds its OWN Mercator projection fitted to
+  //    the inline geometry (geoAlbersUsa returns null for territories); ids s-* (there
+  //    is no main-map element, and getEl/candidates look up the s- prefix).
   function makeInset(opts){
-    const showIds=opts.showIds, frameIds=opts.frameIds||showIds;
-    const showFeatures=features.filter(d=>{
-      const info=STATE_INFO[String(d.id).padStart(2,'0')];
-      return info&&showIds.includes(info.id);
-    });
-    const frameFeatures=features.filter(d=>{
-      const info=STATE_INFO[String(d.id).padStart(2,'0')];
-      return info&&frameIds.includes(info.id);
-    });
-    let bx0=Infinity,by0=Infinity,bx1=-Infinity,by1=-Infinity;
-    frameFeatures.forEach(f=>{
-      const b=path.bounds(f);
-      if(isFinite(b[0][0])){
-        bx0=Math.min(bx0,b[0][0]); by0=Math.min(by0,b[0][1]);
-        bx1=Math.max(bx1,b[1][0]); by1=Math.max(by1,b[1][1]);
-      }
-    });
-    if(!isFinite(bx0))return;
-    const pad=opts.pad??8;
-    const vbX=bx0-pad, vbY=by0-pad-4, vbW=bx1-bx0+pad*2, vbH=by1-by0+pad*2+4;
-    const inset=d3.select(wrap).append('svg')
+    const terr=!!opts.geoFeatures;
+    let vbX,vbY,vbW,vbH,pathGen,showData,idPrefix,drawMesh,drawDC;
+
+    if(terr){
+      vbX=0; vbY=0; vbW=opts.wide?340:200; vbH=opts.wide?150:200;
+      const pad=opts.pad??12, labelSpace=16;
+      const fc={type:'FeatureCollection',features:opts.geoFeatures};
+      const proj=d3.geoMercator();
+      if(opts.rotate)proj.rotate(opts.rotate);
+      proj.fitExtent([[pad,pad+labelSpace],[vbW-pad,vbH-pad]],fc);
+      pathGen=d3.geoPath(proj).pointRadius(opts.dotR??3.5);
+      showData=opts.geoFeatures; idPrefix='s-'; drawMesh=false; drawDC=false;
+    } else {
+      const showIds=opts.showIds, frameIds=opts.frameIds||showIds;
+      showData=features.filter(d=>{
+        const info=STATE_INFO[String(d.id).padStart(2,'0')];
+        return info&&showIds.includes(info.id);
+      });
+      const frameFeatures=features.filter(d=>{
+        const info=STATE_INFO[String(d.id).padStart(2,'0')];
+        return info&&frameIds.includes(info.id);
+      });
+      let bx0=Infinity,by0=Infinity,bx1=-Infinity,by1=-Infinity;
+      frameFeatures.forEach(f=>{
+        const b=path.bounds(f);
+        if(isFinite(b[0][0])){
+          bx0=Math.min(bx0,b[0][0]); by0=Math.min(by0,b[0][1]);
+          bx1=Math.max(bx1,b[1][0]); by1=Math.max(by1,b[1][1]);
+        }
+      });
+      if(!isFinite(bx0))return;
+      const pad=opts.pad??8;
+      vbX=bx0-pad; vbY=by0-pad-4; vbW=bx1-bx0+pad*2; vbH=by1-by0+pad*2+4;
+      pathGen=path; idPrefix='si-'; drawMesh=true; drawDC=opts.showIds.includes('DC');
+    }
+
+    const host=opts.parent?d3.select(opts.parent):d3.select(wrap);
+    const inset=host.append('svg')
       .attr('id',opts.id)
       .attr('viewBox',`${vbX} ${vbY} ${vbW} ${vbH}`)
       .attr('preserveAspectRatio','xMidYMid meet')
-      .style('position','absolute')
-      .style('width','clamp(170px,22vw,240px)')
-      .style('height','clamp(170px,22vw,240px)')
+      .style('width',opts.width||'clamp(170px,22vw,240px)')
+      .style('height',opts.height||'clamp(170px,22vw,240px)')
       .style('background','rgba(7,7,31,.92)')
       .style('border','2px solid rgba(255,215,0,.55)')
       .style('border-radius','12px')
       .style('box-shadow','0 4px 18px rgba(0,0,0,.5)');
-    Object.entries(opts.pos||{}).forEach(([k,v])=>inset.style(k,v));
+    if(opts.parent){
+      inset.style('position','relative').style('flex','0 0 auto');
+    } else {
+      inset.style('position','absolute');
+      Object.entries(opts.pos||{}).forEach(([k,v])=>inset.style(k,v));
+    }
 
     const ig=inset.append('g');
     ig.selectAll('path.state-path')
-      .data(showFeatures.filter(d=>String(d.id).padStart(2,'0')!=='11'))
+      .data(showData.filter(d=>String(d.id).padStart(2,'0')!=='11'))
       .join('path')
       .attr('class','state-path')
-      .attr('id',d=>'si-'+String(d.id).padStart(2,'0'))
-      .attr('d',path)
+      .attr('id',d=>idPrefix+String(d.id).padStart(2,'0'))
+      .attr('d',pathGen)
       .attr('fill',d=>{const info=STATE_INFO[String(d.id).padStart(2,'0')];return info?REG_COL[info.reg]:'#1a2a5a';})
       .call(attachStateHandlers);
 
-    ig.append('path')
-      .datum(mesh)
-      .attr('fill','none')
-      .attr('stroke','rgba(100,140,200,.55)')
-      .attr('stroke-width','0.5')
-      .attr('d',path);
+    if(drawMesh){
+      ig.append('path')
+        .datum(mesh)
+        .attr('fill','none')
+        .attr('stroke','rgba(100,140,200,.55)')
+        .attr('stroke-width','0.5')
+        .attr('d',pathGen);
+    }
 
-    if(showIds.includes('DC')&&dcFeat){
+    if(drawDC&&dcFeat){
       const c=path.centroid(dcFeat);
       if(c&&!isNaN(c[0])){
         inset.append('circle')
@@ -488,9 +536,9 @@ function renderMap(){
     }
 
     inset.append('text')
-      .attr('x',vbX+vbW/2).attr('y',vbY+5.5)
+      .attr('x',vbX+vbW/2).attr('y',vbY+(terr?11:5.5))
       .attr('text-anchor','middle')
-      .attr('font-size',Math.max(4,vbW*0.06))
+      .attr('font-size',terr?Math.min(13,vbH*0.075):Math.max(4,vbW*0.06))
       .attr('font-weight','700')
       .attr('font-family',"'Comic Sans MS',cursive")
       .attr('fill','rgba(255,215,0,.85)')
@@ -513,6 +561,26 @@ function renderMap(){
     label:'🔍 Hawaii Zoom',
     pad:4
   });
+
+  // ── Territory insets (Expert mode only) — a flex row pinned to the bottom edge ──
+  if(dk==='expert'){
+    const tray=d3.select(wrap).append('div')
+      .attr('id','terr-tray')
+      .style('position','absolute').style('left','0').style('right','0').style('bottom','6px')
+      .style('display','flex').style('flex-wrap','wrap')
+      .style('justify-content','center').style('align-items','flex-end')
+      .style('gap','6px')
+      .style('pointer-events','none'); // empty areas must not block map clicks
+    const trayNode=tray.node();
+    const terrFeat=ids=>TERRITORY_GEO.features.filter(f=>ids.includes(String(f.id)));
+    const sq='clamp(114px,15.5vw,160px)';
+    makeInset({id:'carib-inset',  parent:trayNode,geoFeatures:terrFeat(['72','78']),label:'🔍 Caribbean', width:sq,height:sq});
+    makeInset({id:'samoa-inset',  parent:trayNode,geoFeatures:terrFeat(['60']),     label:'🔍 Am. Samoa', width:sq,height:sq});
+    makeInset({id:'mariana-inset',parent:trayNode,geoFeatures:terrFeat(['66','69']),label:'🔍 Marianas',  width:sq,height:sq});
+    makeInset({id:'umoi-inset',   parent:trayNode,geoFeatures:terrFeat(['74']),     label:'🔍 Minor Outlying Is.',
+               wide:true,rotate:[170,0],dotR:7,width:'clamp(150px,23vw,236px)',height:'clamp(100px,14vw,140px)'});
+    tray.selectAll('svg').style('pointer-events','auto'); // but the insets themselves are clickable
+  }
 }
 
 // ── Game flow ──────────────────────────────────────────
@@ -531,9 +599,10 @@ async function initGame(same=false){
 
 function buildPool(){
   const all=Object.values(STATE_INFO);
-  if(dk==='easy')      return all.filter(s=>EASY_IDS.has(s.id));
-  else if(dk==='medium') return all.filter(s=>!CONT_SKIP.has(s.id));
-  return all;
+  if(dk==='easy')   return all.filter(s=>EASY_IDS.has(s.id));
+  if(dk==='medium') return all.filter(s=>!CONT_SKIP.has(s.id)&&!TERRITORY_IDS.has(s.id));
+  if(dk==='hard')   return all.filter(s=>!TERRITORY_IDS.has(s.id)); // all 50 states + DC
+  return all; // expert: 50 states + DC + territories
 }
 
 function doTrans(){
